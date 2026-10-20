@@ -1,0 +1,27 @@
+{
+  "name": "@moyarich/vite-github-actions",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Vite plugin to bundle Node 24 GitHub Actions",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run tests"
+  },
+  "peerDependencies": {
+    "vite": "^7.0.0 || ^8.0.0"
+  },
+  "devDependencies": {
+    "vite": "^7.3.7"
+  }
+}
