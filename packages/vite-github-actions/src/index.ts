@@ -10,17 +10,23 @@ export interface GithubActionsOptions {
   bundleDependencies?: boolean;
   validateMetadata?: boolean;
 }
-export function discoverActionEntries(sourcesDir: string): Record<string, string> {
+export function discoverActionEntries(
+  sourcesDir: string,
+): Record<string, string> {
   const entries: Record<string, string> = {};
-  if (!existsSync(sourcesDir)) throw new Error("Actions source directory not found: " + sourcesDir);
+  if (!existsSync(sourcesDir))
+    throw new Error("Actions source directory not found: " + sourcesDir);
   for (const entry of readdirSync(sourcesDir, { withFileTypes: true })) {
     if (!entry.isDirectory()) continue;
     const base = join(sourcesDir, entry.name);
-    const file = ["index.ts", entry.name + "-cli.ts"].find(name => existsSync(join(base, name)));
+    const file = ["index.ts", entry.name + "-cli.ts"].find((name) =>
+      existsSync(join(base, name)),
+    );
     if (!file) throw new Error("Missing TypeScript action entry: " + base);
     entries[entry.name] = join(base, file);
   }
-  if (!Object.keys(entries).length) throw new Error("No TypeScript actions discovered");
+  if (!Object.keys(entries).length)
+    throw new Error("No TypeScript actions discovered");
   return entries;
 }
 export function githubActions(options: GithubActionsOptions = {}): Plugin {
@@ -40,7 +46,9 @@ export function githubActions(options: GithubActionsOptions = {}): Plugin {
         }
       }
       return {
-        ssr: { noExternal: options.bundleDependencies === false ? undefined : true },
+        ssr: {
+          noExternal: options.bundleDependencies === false ? undefined : true,
+        },
         build: {
           ssr: true,
           target: options.target ?? "node24",

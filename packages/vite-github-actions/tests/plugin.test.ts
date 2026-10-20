@@ -9,8 +9,12 @@ describe("vite-github-actions", () => {
     try {
       mkdirSync(join(root, "example"));
       writeFileSync(join(root, "example", "index.ts"), "export {};");
-      expect(discoverActionEntries(root)).toEqual({ example: join(root, "example", "index.ts") });
-    } finally { rmSync(root, { recursive: true, force: true }); }
+      expect(discoverActionEntries(root)).toEqual({
+        example: join(root, "example", "index.ts"),
+      });
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
   it("provides a Vite plugin", () => {
     expect(githubActions().name).toBe("vite-github-actions");
