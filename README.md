@@ -9,13 +9,15 @@ import { defineConfig } from "vite";
 import { githubActions } from "@moyarich/vite-github-actions";
 
 export default defineConfig({
-  plugins: [githubActions({
-    sourcesDir: "src/actions",
-    actionsDir: "actions",
-    outputDir: "actions/dist",
-    target: "node24",
-    validateMetadata: true,
-  })],
+  plugins: [
+    githubActions({
+      sourcesDir: "src/actions",
+      actionsDir: "actions",
+      outputDir: "actions/dist",
+      target: "node24",
+      validateMetadata: true,
+    }),
+  ],
 });
 ```
 

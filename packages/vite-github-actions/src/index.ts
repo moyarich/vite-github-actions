@@ -46,7 +46,9 @@ export function githubActions(options: GithubActionsOptions = {}): Plugin {
           const yaml = readFileSync(metadata, "utf8");
           const expected = "../dist/" + name + ".mjs";
           if (!yaml.includes(expected)) {
-            throw new Error("Action metadata " + metadata + " must reference " + expected);
+            throw new Error(
+              "Action metadata " + metadata + " must reference " + expected,
+            );
           }
         }
       }
