@@ -1,4 +1,4 @@
-import { existsSync, readdirSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { resolve, join } from "node:path";
 import type { Plugin } from "vite";
 
@@ -41,8 +41,13 @@ export function githubActions(options: GithubActionsOptions = {}): Plugin {
       if (options.validateMetadata !== false) {
         for (const name of Object.keys(entries)) {
           const metadata = join(actions, name, "action.yml");
-          // Some actions are invoked only by reusable workflows, not action.yml.
+          // Some CLI entries are invoked directly from reusable workflows.
           if (!existsSync(metadata)) continue;
+          const yaml = readFileSync(metadata, "utf8");
+          const expected = "../dist/" + name + ".mjs";
+          if (!yaml.includes(expected)) {
+            throw new Error("Action metadata " + metadata + " must reference " + expected);
+          }
         }
       }
       return {
