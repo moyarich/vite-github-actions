@@ -1,0 +1,117 @@
+name: Check distribution
+
+run-name: >-
+  Check dist · ${{ inputs.packages }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      packages:
+        description: Package directory/name or all discovered workspace packages
+        type: string
+        required: true
+        default: all
+      dist-path:
+        description: Committed distribution path override (for example actions/dist/); empty derives package dist/
+        type: string
+        default: ""
+      build-command:
+        description: Build command override (for example npm run build:cli); empty uses the selected workspace build
+        type: string
+        default: ""
+      install-command:
+        description: Dependency install command
+        type: string
+        default: npm ci --ignore-scripts
+      node-caching:
+        description: Node cache mode (npm or empty to disable)
+        type: string
+        default: npm
+      include-root-package:
+        description: Include buildable root package in discovery
+        type: boolean
+        default: false
+      workspace-tools-source:
+        description: Workspace Tools CLI source for discovery
+        type: choice
+        required: true
+        default: auto
+        options:
+          - auto
+          - checkout:current
+          - checkout:upstream;branch:main
+          - registry:npm:latest
+
+permissions: {}
+
+jobs:
+  discover-packages:
+    name: Discover workspace packages
+    permissions:
+      contents: read
+    uses: moyarich/reusable-workflows/.github/workflows/reusable_discover-packages.yml@main
+    with:
+      packages-directory: packages
+      use-workspaces: true
+      require-build-script: true
+      include-private: true
+      include-root-package: ${{ inputs.include-root-package }}
+      workspace-tools-source: ${{ inputs.workspace-tools-source }}
+
+  select-packages:
+    name: Select distributions
+    needs: discover-packages
+    runs-on: ubuntu-latest
+    permissions: {}
+    outputs:
+      matrix: ${{ steps.select.outputs.matrix }}
+      has-packages: ${{ steps.select.outputs.has-packages }}
+    steps:
+      - name: Filter discovered packages
+        id: select
+        shell: bash
+        env:
+          DISCOVERED: ${{ needs.discover-packages.outputs.packages }}
+          PACKAGES: ${{ inputs.packages }}
+          DIST_PATH_OVERRIDE: ${{ inputs.dist-path }}
+          BUILD_COMMAND_OVERRIDE: ${{ inputs.build-command }}
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+          const report = JSON.parse(process.env.DISCOVERED);
+          const selected = process.env.PACKAGES.trim();
+          const eligible = report.included;
+          const packages = selected === 'all'
+            ? eligible
+            : eligible.filter(p => p.directory === selected || p.name === selected);
+          if (packages.length === 0) {
+            console.error('::error title=No matching package::Select a discovered package directory/name or all.');
+            process.exit(1);
+          }
+          if (packages.length > 1 && (process.env.DIST_PATH_OVERRIDE || process.env.BUILD_COMMAND_OVERRIDE)) {
+            console.error('::error title=Ambiguous overrides::When selecting multiple packages, omit dist-path and build-command overrides or select one package.');
+            process.exit(1);
+          }
+          const matrix = JSON.stringify({include: packages});
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, 'matrix=' + matrix + '\n');
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, 'has-packages=true\n');
+          console.log('Selected ' + packages.map(p => p.directory).join(', '));
+          NODE
+
+  check-dist:
+    name: "dist: ${{ matrix.name }}"
+    needs: select-packages
+    if: ${{ needs.select-packages.outputs.has-packages == 'true' }}
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.select-packages.outputs.matrix) }}
+    permissions:
+      contents: read
+    uses: moyarich/reusable-workflows/.github/workflows/reusable_check-dist.yml@main
+    with:
+      dist-path: ${{ inputs.dist-path || format('{0}/dist/', matrix.directory) }}
+      build-command: ${{ inputs.build-command || format('npm run build --workspace {0}', matrix.name) }}
+      install-command: ${{ inputs.install-command }}
+      node-caching: ${{ inputs.node-caching }}
+      artifact-name: ${{ format('dist-{0}', strategy.job-index) }}
+      node-version: "24"

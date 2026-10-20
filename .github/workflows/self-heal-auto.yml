@@ -1,0 +1,89 @@
+name: Self-heal - auto
+
+on:
+  workflow_dispatch:
+    inputs:
+      repair:
+        description: Repairs to run
+        type: choice
+        required: true
+        default: all
+        options:
+          - all
+          - package-lock
+          - prettier
+      commit:
+        description: Commit repaired files
+        type: boolean
+        default: true
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  actions: read
+  contents: write
+  packages: read
+
+concurrency:
+  group: self-heal-${{ github.event_name == 'workflow_run' && 'main' || github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  package-lock:
+    if: >-
+      ${{ (github.event_name == 'workflow_dispatch' && inputs.repair != 'prettier') ||
+          (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'failure' &&
+           github.event.workflow_run.event == 'push' &&
+           github.event.workflow_run.head_repository.full_name == github.repository &&
+           github.event.workflow_run.head_branch == 'main') }}
+    uses: moyarich/reusable-workflows/.github/workflows/reusable_npm-package-lock.yml@main
+    with:
+      commit: ${{ github.event_name == 'workflow_run' || inputs.commit }}
+      node-version: "24"
+    secrets:
+      package-token: ${{ secrets.GITHUB_TOKEN }}
+
+  prettier:
+    needs: package-lock
+    if: >-
+      ${{ always() &&
+          ((github.event_name == 'workflow_dispatch' && inputs.repair != 'package-lock') ||
+           (github.event_name == 'workflow_run' && needs.package-lock.result == 'success')) &&
+          (needs.package-lock.result == 'success' || needs.package-lock.result == 'skipped') }}
+    uses: moyarich/reusable-workflows/.github/workflows/reusable_prettier.yml@main
+    with:
+      mode: fix
+      prettier-config: this-repository
+      commit: ${{ github.event_name == 'workflow_run' || inputs.commit }}
+      node-version: "24"
+
+  summarize:
+    name: Self-heal outcome
+    needs: [package-lock, prettier]
+    if: always()
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - name: Write repair summary
+        shell: bash
+        env:
+          LOCK: ${{ needs.package-lock.result }}
+          FORMAT: ${{ needs.prettier.result }}
+        run: |
+          {
+            echo "## Self-heal"
+            echo
+            echo "| Repair | Result |"
+            echo "| --- | --- |"
+            echo "| npm lockfile | $LOCK |"
+            echo "| Prettier (non-workflow files) | $FORMAT |"
+            echo
+            echo "> Workflow YAML files are intentionally excluded from automatic formatting commits."
+            echo "> Editing .github/workflows/ requires a separately authorized workflow-enabled credential or a reviewed pull request."
+            echo "> This automation handles recognized lockfile/formatting drift, not arbitrary CI failures."
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [[ "$LOCK" == failure || "$FORMAT" == failure ]]; then
+            exit 1
+          fi

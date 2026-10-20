@@ -1,0 +1,30 @@
+name: Deploy playground to GitHub Pages
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "apps/playground/**"
+      - "packages/**"
+      - "docs/**"
+      - "examples/**"
+      - ".github/workflows/pages.yml"
+      - "package.json"
+      - "package-lock.json"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: read
+  pages: write
+  id-token: write
+
+jobs:
+  pages:
+    uses: moyarich/reusable-workflows/.github/workflows/reusable_github-pages.yml@main
+    with:
+      node-version: "24"
+      build-command: npm run build:playground
+      output-directory: apps/playground/dist
+    secrets: inherit

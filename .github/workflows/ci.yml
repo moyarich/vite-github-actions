@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  lint-workflows:
+    name: Validate workflow syntax
+    permissions:
+      contents: read
+    # Merge the reusable workflow upstream before adding or renaming this caller.
+    uses: moyarich/reusable-workflows/.github/workflows/reusable_actionlint.yml@main
+
+  checks:
+    name: Monorepo checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          cache: npm
+      - run: npm ci --include=optional
+      - run: npm run checks
+      - run: npm run pack:check
+      - name: Summary
+        if: always()
+        env:
+          STATUS: ${{ job.status }}
+        run: echo "## Monorepo checks — $STATUS" >> "$GITHUB_STEP_SUMMARY"
