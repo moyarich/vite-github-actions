@@ -1,7 +1,7 @@
 {
-  "name": "monorepo-template",
+  "name": "@moyarich/vite-github-actions",
   "version": "0.1.0",
-  "private": true,
+  "private": false,
   "type": "module",
   "scripts": {
     "dev": "npm run dev --workspaces --if-present",
@@ -16,7 +16,8 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "checks": "npm run format:check && npm run lint && npm run typecheck && npm test && npm run build",
-    "pack:check": "npm pack --workspaces --dry-run"
+    "pack:check": "npm pack --workspaces --dry-run",
+    "prepare": "npm run build --workspace packages/vite-github-actions"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
@@ -38,5 +39,14 @@
   "workspaces": [
     "packages/*",
     "apps/*"
+  ],
+  "exports": {
+    ".": {
+      "types": "./packages/vite-github-actions/dist/index.d.ts",
+      "import": "./packages/vite-github-actions/dist/index.js"
+    }
+  },
+  "files": [
+    "packages/vite-github-actions/dist"
   ]
 }
