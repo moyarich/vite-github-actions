@@ -95,13 +95,12 @@ jobs:
           ref: main
           path: .github/check-dist-runtime
           sparse-checkout: |
-            src/actions/check-dist
-            reusable-configurations/check-dist-config.schema.json
+            actions/check-dist
           sparse-checkout-cone-mode: false
           persist-credentials: false
       - name: Select and validate distribution packages
         id: select
-        uses: ./.github/check-dist-runtime/src/actions/check-dist
+        uses: ./.github/check-dist-runtime/actions/check-dist
         with:
           discovered: ${{ needs.discover-packages.outputs.packages }}
           package: ${{ inputs.package }}
