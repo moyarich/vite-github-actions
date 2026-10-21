@@ -1,34 +1,49 @@
 name: Check distribution
 
 run-name: >-
-  Check dist · ${{ inputs.packages }}
+  Check dist · ${{ inputs.package }}
 
 on:
   workflow_dispatch:
     inputs:
-      packages:
-        description: Package directory/name or all discovered workspace packages
-        type: string
+      package:
+        description: Select a publishable workspace package
+        type: choice
         required: true
         default: all
+        options:
+          - all
+          - packages/vite-github-actions
       dist-path:
-        description: Committed distribution path override (for example actions/dist/); empty derives package dist/
+        description: "Distribution path template. Supports {packageDir}, {package},
+          {packageName}, {workspace}; blank uses repository configuration or {packageDir}/dist."
         type: string
         default: ""
       build-command:
-        description: Build command override (for example npm run build:cli); empty uses the selected workspace build
+        description: Build command override (for example npm run build:cli); 
+          empty uses the selected workspace build
         type: string
         default: ""
       install-command:
         description: Dependency install command
         type: string
         default: npm ci --ignore-scripts
+      dry-run:
+        description: Upload rebuilt artifacts, without committing or pushing
+        type: boolean
+        default: true
+      commit:
+        description: Commit updated output only when dry-run is false (single 
+          package only)
+        type: boolean
+        default: false
       node-caching:
         description: Node cache mode (npm or empty to disable)
         type: string
         default: npm
       include-root-package:
-        description: Include buildable root package in discovery
+        description: Include the root package only when it has an explicitly 
+          configured distribution target
         type: boolean
         default: false
       workspace-tools-source:
@@ -49,7 +64,8 @@ jobs:
     name: Discover workspace packages
     permissions:
       contents: read
-    uses: moyarich/reusable-workflows/.github/workflows/reusable_discover-packages.yml@main
+    uses: 
+      moyarich/reusable-workflows/.github/workflows/reusable_discover-packages.yml@main
     with:
       packages-directory: packages
       use-workspaces: true
@@ -66,37 +82,31 @@ jobs:
     outputs:
       matrix: ${{ steps.select.outputs.matrix }}
       has-packages: ${{ steps.select.outputs.has-packages }}
+      single-package: ${{ steps.select.outputs.single-package }}
     steps:
-      - name: Filter discovered packages
+      - name: Checkout configuration
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Checkout reusable check-dist action
+        uses: actions/checkout@v7
+        with:
+          repository: moyarich/reusable-workflows
+          ref: main
+          path: .github/check-dist-runtime
+          sparse-checkout: |
+            src/actions/check-dist
+            reusable-configurations/check-dist-config.schema.json
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - name: Select and validate distribution packages
         id: select
-        shell: bash
-        env:
-          DISCOVERED: ${{ needs.discover-packages.outputs.packages }}
-          PACKAGES: ${{ inputs.packages }}
-          DIST_PATH_OVERRIDE: ${{ inputs.dist-path }}
-          BUILD_COMMAND_OVERRIDE: ${{ inputs.build-command }}
-        run: |
-          node <<'NODE'
-          const fs = require('node:fs');
-          const report = JSON.parse(process.env.DISCOVERED);
-          const selected = process.env.PACKAGES.trim();
-          const eligible = report.included;
-          const packages = selected === 'all'
-            ? eligible
-            : eligible.filter(p => p.directory === selected || p.name === selected);
-          if (packages.length === 0) {
-            console.error('::error title=No matching package::Select a discovered package directory/name or all.');
-            process.exit(1);
-          }
-          if (packages.length > 1 && (process.env.DIST_PATH_OVERRIDE || process.env.BUILD_COMMAND_OVERRIDE)) {
-            console.error('::error title=Ambiguous overrides::When selecting multiple packages, omit dist-path and build-command overrides or select one package.');
-            process.exit(1);
-          }
-          const matrix = JSON.stringify({include: packages});
-          fs.appendFileSync(process.env.GITHUB_OUTPUT, 'matrix=' + matrix + '\n');
-          fs.appendFileSync(process.env.GITHUB_OUTPUT, 'has-packages=true\n');
-          console.log('Selected ' + packages.map(p => p.directory).join(', '));
-          NODE
+        uses: ./.github/check-dist-runtime/src/actions/check-dist
+        with:
+          discovered: ${{ needs.discover-packages.outputs.packages }}
+          package: ${{ inputs.package }}
+          dist-path: ${{ inputs.dist-path }}
+          build-command: ${{ inputs.build-command }}
 
   check-dist:
     name: "dist: ${{ matrix.name }}"
@@ -106,12 +116,21 @@ jobs:
       fail-fast: false
       matrix: ${{ fromJSON(needs.select-packages.outputs.matrix) }}
     permissions:
-      contents: read
-    uses: moyarich/reusable-workflows/.github/workflows/reusable_check-dist.yml@main
+      contents: write
+    uses: 
+      moyarich/reusable-workflows/.github/workflows/reusable_self-heal-dist.yml@main
     with:
-      dist-path: ${{ inputs.dist-path || format('{0}/dist/', matrix.directory) }}
-      build-command: ${{ inputs.build-command || format('npm run build --workspace {0}', matrix.name) }}
+      dist-path: ${{ matrix.distTemplate }}
+      build-command: ${{ matrix.buildCommand }}
       install-command: ${{ inputs.install-command }}
       node-caching: ${{ inputs.node-caching }}
-      artifact-name: ${{ format('dist-{0}', strategy.job-index) }}
+      package-name: ${{ matrix.name }}
+      package-directory: ${{ matrix.directory }}
+      artifact-name: ${{ format('dist-{0}', matrix.artifactSuffix) }}
       node-version: "24"
+      repair: true
+      commit: ${{ inputs.commit && !inputs.dry-run && 
+        needs.select-packages.outputs.single-package == 'true' }}
+      target-branch: ${{ github.ref_name }}
+      expected-sha: ${{ github.sha }}
+      checkout-sha: ${{ github.sha }}
