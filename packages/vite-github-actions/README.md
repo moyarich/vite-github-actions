@@ -33,15 +33,17 @@ runs:
 import { defineConfig } from "vite";
 import { githubActions } from "@moyarich/vite-github-actions";
 export default defineConfig({
-  plugins: [githubActions({
-    repositoryAction: { entry: "src/index.ts" },
-  })],
+  plugins: [
+    githubActions({
+      repositoryAction: { entry: "src/index.ts" },
+    }),
+  ],
 });
 ```
 
 The plugin bundles to `dist/index.mjs`, checks that the root action metadata points there, and **does not delete the repository root**. Set `repositoryAction.metadataFile` to `action.yaml` or `repositoryAction.main` to a custom distribution filename. The optional `outputDir` must match its parent directory. This mode intentionally doesn't copy metadata or manage releases.
 
-GitHub Marketplace listing is a **separate GitHub release action**: the repository must be public and have a single root action metadata file, with a unique Marketplace name. Publish a release using GitHub's *Publish this Action to the GitHub Marketplace* option. The plugin prepares build files but cannot register or publish the listing.
+GitHub Marketplace listing is a **separate GitHub release action**: the repository must be public and have a single root action metadata file, with a unique Marketplace name. Publish a release using GitHub's _Publish this Action to the GitHub Marketplace_ option. The plugin prepares build files but cannot register or publish the listing.
 
 ## Multi-action distribution
 
@@ -49,20 +51,23 @@ GitHub Marketplace listing is a **separate GitHub release action**: the reposito
 import { defineConfig } from "vite";
 import { githubActions } from "@moyarich/vite-github-actions";
 export default defineConfig({
-  plugins: [githubActions({
-    entries: { publish: "src/commands/publish.ts" },
-    metadataDir: "packages/actions/actions",
-    outputDir: "packages/actions/dist/bundles",
-    distributionDir: "actions",
-    generateDistributions: true,
-    sharedChunks: true,
-    runtimeFiles: {
-      "check-dist": {
-        "select.mjs": "packages/cli/src/check-dist/select.mjs",
-        "config.schema.json": "reusable-configurations/check-dist-config.schema.json",
+  plugins: [
+    githubActions({
+      entries: { publish: "src/commands/publish.ts" },
+      metadataDir: "packages/actions/actions",
+      outputDir: "packages/actions/dist/bundles",
+      distributionDir: "actions",
+      generateDistributions: true,
+      sharedChunks: true,
+      runtimeFiles: {
+        "check-dist": {
+          "select.mjs": "packages/cli/src/check-dist/select.mjs",
+          "config.schema.json":
+            "reusable-configurations/check-dist-config.schema.json",
+        },
       },
-    },
-  })],
+    }),
+  ],
 });
 ```
 
