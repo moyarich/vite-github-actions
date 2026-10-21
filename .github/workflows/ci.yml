@@ -1,38 +1,225 @@
 name: CI
 
 on:
-  push:
-    branches: [main]
   pull_request:
+    paths:
+      - "src/**"
+      - "packages/**"
+      - "apps/**"
+      - "tests/**"
+      - ".storybook/**"
+      - "**/.storybook/**"
+      - "**/*.stories.*"
+      - "**/*.story.*"
+      - "vitest.config.*"
+      - "playwright.config.*"
+      - "**/playwright.config.*"
+      - "package.json"
+      - "package-lock.json"
+      - "eslint.config.mjs"
+      - ".prettierignore"
+      - "tsconfig.json"
+      - ".github/workflows/ci.yml"
+
   workflow_dispatch:
+    inputs:
+      checkout-sha:
+        description: Exact healed commit SHA to validate
+        required: true
+        type: string
 
 permissions:
   contents: read
+  pull-requests: read
+
+concurrency:
+  group: ci-${{ github.repository }}-${{ github.workflow }}-${{ github.event.pull_request.number || inputs.checkout-sha || github.run_id }}
+  cancel-in-progress: false
 
 jobs:
   lint-workflows:
     name: Validate workflow syntax
     permissions:
       contents: read
-    # Merge the reusable workflow upstream before adding or renaming this caller.
     uses: moyarich/reusable-workflows/.github/workflows/reusable_actionlint.yml@main
 
-  checks:
-    name: Monorepo checks
+  cli:
+    name: Workspace build, typecheck and tests
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v7
+      - name: Checkout
+        uses: actions/checkout@v7
         with:
+          ref: ${{ inputs.checkout-sha || github.sha }}
           persist-credentials: false
-      - uses: actions/setup-node@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
         with:
           node-version: "24"
           cache: npm
-      - run: npm ci --include=optional
-      - run: npm run checks
-      - run: npm run pack:check
-      - name: Summary
+
+      - name: Install dependencies
+        run: npm ci --include=optional
+        
+      - name: Validate package changelogs
+        uses: moyarich/reusable-workflows/actions/validate-package-changelogs@main
+
+      - name: Check formatting
+        run: npm run format:check
+
+      - name: Run lint
+        run: npm run lint
+
+      - name: Run Typecheck
+        id: typecheck
+        shell: bash
+        run: |
+          npm run typecheck --workspaces --if-present
+
+          if [[ -f tsconfig.tests.json ]]; then
+            npx --no-install tsc -p tsconfig.tests.json --noEmit
+          elif [[ -f tsconfig.json ]]; then
+            npx --no-install tsc -p tsconfig.json --noEmit
+          else
+            echo "No TypeScript configuration found; skipping tsc."
+          fi
+
+      - name: Build workspaces
+        id: build-package
+        run: npm run build
+
+      - name: Run Vitest
+        id: vitest
+        run: npm test
+
+      - name: Verify package contents
+        id: verify-package
+        run: npm run pack:check --if-present
+
+      - name: Discover Storybook test scripts
+        id: storybook
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          import { readFileSync, readdirSync, existsSync, appendFileSync, writeFileSync } from "node:fs";
+          import { join } from "node:path";
+
+          const root = JSON.parse(readFileSync("package.json", "utf8"));
+          const patterns = Array.isArray(root.workspaces) ? root.workspaces : root.workspaces?.packages ?? [];
+          const directories = ["."];
+          for (const pattern of patterns) {
+            if (!pattern.endsWith("/*")) continue;
+            const parent = pattern.slice(0, -2);
+            if (!existsSync(parent)) continue;
+            for (const entry of readdirSync(parent, { withFileTypes: true })) {
+              if (entry.isDirectory()) directories.push(join(parent, entry.name));
+            }
+          }
+          const commands = [];
+          for (const dir of directories) {
+            const manifestPath = join(dir, "package.json");
+            if (!existsSync(manifestPath)) continue;
+            const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+            const script = ["test:storybook", "test-storybook"].find((key) => manifest.scripts?.[key]);
+            if (script) commands.push({ dir, script });
+          }
+          writeFileSync(join(process.env.RUNNER_TEMP, "storybook-tests.json"), JSON.stringify(commands));
+          appendFileSync(process.env.GITHUB_OUTPUT, `enabled=${commands.length > 0}\n`);
+          console.log(commands.length ? `Found Storybook tests in ${commands.map((c) => c.dir).join(", ")}` : "No Storybook test scripts configured; skipping.");
+          NODE
+
+      - name: Install Chromium for Storybook tests
+        if: steps.storybook.outputs.enabled == 'true'
+        run: npx --no-install playwright install --with-deps chromium
+
+      - name: Run Storybook tests
+        id: storybook-tests
+        if: steps.storybook.outputs.enabled == 'true'
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          import { readFileSync } from "node:fs";
+          import { join } from "node:path";
+          import { spawnSync } from "node:child_process";
+
+          const commands = JSON.parse(readFileSync(join(process.env.RUNNER_TEMP, "storybook-tests.json"), "utf8"));
+          for (const { dir, script } of commands) {
+            const args = ["run", script, ...(dir === "." ? [] : ["--workspace", dir])];
+            console.log(`Running npm ${args.join(" ")}`);
+            const result = spawnSync("npm", args, { stdio: "inherit", shell: false });
+            if (result.status !== 0) process.exit(result.status || 1);
+          }
+          NODE
+
+      # Detect browser-test changes only on pull requests.
+      # Manual dispatch runs Playwright when configured.
+      - name: Detect Playwright changes
+        if: github.event_name == 'pull_request'
+        id: changes
+        uses: dorny/paths-filter@v4
+        with:
+          filters: |
+            playwright:
+              - '**/*.spec.*'
+              - '**/*.specs.*'
+              - '**/playwright.config.*'
+              - 'package.json'
+              - 'package-lock.json'
+              - '.github/workflows/ci.yml'
+
+      # Only install browsers when Playwright is configured
+      # and the relevant files have changed (or manually dispatched).
+      - name: Install Playwright browsers
+        id: playwright-install
+        if: |
+          hashFiles('playwright.config.*', '**/playwright.config.*') != '' &&
+          (github.event_name != 'pull_request' ||
+           steps.changes.outputs.playwright == 'true')
+        run: npx --no-install playwright install --with-deps chromium
+
+      - name: Run Playwright
+        id: playwright
+        if: |
+          hashFiles('playwright.config.*', '**/playwright.config.*') != '' &&
+          (github.event_name != 'pull_request' ||
+           steps.changes.outputs.playwright == 'true')
+        run: npx --no-install playwright test
+
+      - name: Upload Playwright traces on failure
+        if: failure() && steps.playwright.outcome == 'failure'
+        uses: actions/upload-artifact@v6
+        with:
+          name: playwright-traces
+          path: test-results/
+          if-no-files-found: ignore
+
+      - name: Write verification summary
         if: always()
         env:
           STATUS: ${{ job.status }}
-        run: echo "## Monorepo checks — $STATUS" >> "$GITHUB_STEP_SUMMARY"
+          TYPECHECK: ${{ steps.typecheck.outcome }}
+          BUILD_PACKAGE: ${{ steps.build-package.outcome }}
+          VITEST: ${{ steps.vitest.outcome }}
+          VERIFY_PACKAGE: ${{ steps.verify-package.outcome }}
+          PLAYWRIGHT: ${{ steps.playwright.outcome }}
+          STORYBOOK: ${{ steps.storybook-tests.outcome }}
+        run: |
+          {
+            echo "## Workspace build and tests"
+            echo
+            echo "| Check | Result |"
+            echo "|---|---|"
+            echo "| Typecheck | $TYPECHECK |"
+            echo "| Workspace build | $BUILD_PACKAGE |"
+            echo "| Vitest | $VITEST |"
+            echo "| Package verification | $VERIFY_PACKAGE |"
+            echo "| Playwright | $PLAYWRIGHT |"
+            echo "| Storybook | $STORYBOOK |"
+            echo
+            echo "**Overall:** $STATUS"
+            echo
+            echo
+            echo "Node.js 24"
+          } >> "$GITHUB_STEP_SUMMARY"
