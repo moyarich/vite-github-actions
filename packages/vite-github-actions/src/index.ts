@@ -6,7 +6,18 @@ import type { Plugin } from "vite";
 
 /** Additional runtime files copied next to a generated action's metadata. */
 export type ActionFiles = Record<string, Record<string, string>>;
+/** A standalone action exposed as owner/repository@ref in GitHub Marketplace. */
+export interface RepositoryActionOptions {
+  /** JavaScript or TypeScript entrypoint, relative to repository root. */
+  entry: string;
+  /** Root metadata path, action.yml or action.yaml (default: action.yml). */
+  metadataFile?: "action.yml" | "action.yaml";
+  /** Compiled entry relative to repository root (default: dist/index.mjs). */
+  main?: string;
+}
 export interface GithubActionsOptions {
+  /** Build a single action with metadata at repository root. */
+  repositoryAction?: RepositoryActionOptions;
   /** Legacy action metadata location (default: actions). */
   actionsDir?: string;
   /** Legacy directory scanned for source action entrypoints. */
@@ -170,13 +181,41 @@ export function generateActionDistributions(
 export function githubActions(options: GithubActionsOptions = {}): Plugin {
   const root = process.cwd();
   const sources = resolve(root, options.sourcesDir ?? "src/actions");
-  const output = resolve(root, options.outputDir ?? "actions/dist");
+  const output = resolve(root, options.outputDir ?? (options.repositoryAction ? "dist" : "actions/dist"));
   const actions = resolve(root, options.metadataDir ?? options.actionsDir ?? "actions");
   let names: string[] = [];
   return {
     name: "vite-github-actions",
     apply: "build",
     config() {
+      if (options.repositoryAction) {
+        if (options.generateDistributions || options.entries || options.includeDiscovered || options.sharedChunks)
+          throw new Error("repositoryAction cannot be combined with monorepo distribution options");
+        const { entry, metadataFile = "action.yml", main = "dist/index.mjs" } = options.repositoryAction;
+        const source = safePath(root, entry, "Repository action entry");
+        if (!existsSync(source)) throw new Error("Repository action entry not found: " + source);
+        const metadataPath = resolve(root, metadataFile);
+        if (!existsSync(metadataPath)) throw new Error("Marketplace action requires root " + metadataFile);
+        const yaml = readFileSync(metadataPath, "utf8");
+        if (!/^\\s*using:\\s*node(?:20|24)\\s*$/m.test(yaml))
+          throw new Error("repositoryAction requires a Node.js action metadata runtime");
+        const declared = yaml.match(/^\\s*main:\\s*["']?([^\\s"'#]+)["']?\\s*$/m)?.[1];
+        if (!declared || declared !== main)
+          throw new Error(`Root ${metadataFile} runs.main must reference ${main}`);
+        const dest = safePath(root, main, "Marketplace bundle output");
+        const dir = dirname(dest);
+        if (dir === root) throw new Error("Marketplace bundle must be in a dedicated output directory");
+        if (options.outputDir && resolve(root, options.outputDir) !== dir)
+          throw new Error("outputDir must match the directory of repositoryAction.main");
+        return {
+          ssr: { noExternal: options.bundleDependencies === false ? undefined : true },
+          build: {
+            ssr: true, target: options.target ?? "node24",
+            outDir: dir, emptyOutDir: true, minify: false,
+            rollupOptions: { input: { action: source }, output: { entryFileNames: dest.split(/[\\\\/]/).at(-1) } },
+          },
+        };
+      }
       const explicit = Object.fromEntries(Object.entries(options.entries ?? {}).map(([name, file]) => {
         const path = safePath(root, file, "Action entry");
         if (!existsSync(path)) throw new Error("Action entry not found: " + path);
@@ -218,7 +257,7 @@ export function githubActions(options: GithubActionsOptions = {}): Plugin {
       };
     },
     closeBundle() {
-      if (options.generateDistributions) generateActionDistributions(options, names, root);
+      if (options.generateDistributions && !options.repositoryAction) generateActionDistributions(options, names, root);
     },
   };
 }
