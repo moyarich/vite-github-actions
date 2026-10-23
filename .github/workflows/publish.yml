@@ -12,7 +12,7 @@ on:
         description: Workspace Tools CLI source for package discovery
         type: choice
         required: true
-        default: auto
+        default: checkout:current
         options:
           - auto
           - checkout:current
@@ -25,7 +25,7 @@ on:
         default: all
         options:
           - all
-          - packages/example
+          - packages/vite-github-actions
       registry:
         description: Publish destination
         required: true
