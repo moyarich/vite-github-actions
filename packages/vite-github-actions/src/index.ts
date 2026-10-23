@@ -10,12 +10,12 @@ import {
 } from "node:fs";
 import {
   dirname,
-  extname,
   isAbsolute,
   join,
   relative,
   resolve,
   sep,
+  win32,
 } from "node:path";
 import type { Plugin } from "vite";
 
@@ -230,7 +230,7 @@ export function generateActionDistributions(
         if (!main || !existsSync(safePath(outputDir, main, "Action main")))
           throw new Error("Missing built Node action entry: " + name);
       }
-      for (const match of yaml.matchAll(/\$GITHUB_ACTION_PATH\/([\w.\/-]+)/g)) {
+      for (const match of yaml.matchAll(/\$GITHUB_ACTION_PATH/([\w./-]+)/g)) {
         if (!existsSync(safePath(outputDir, match[1], "Composite runtime")))
           throw new Error(
             "Missing composite action runtime: " + name + "/" + match[1],
@@ -326,7 +326,7 @@ export function githubActions(options: GithubActionsOptions = {}): Plugin {
             minify: false,
             rollupOptions: {
               input: { action: source },
-              output: { entryFileNames: dest.split(/[\\\\/]/).at(-1) },
+              output: { entryFileNames: win32.basename(dest) },
             },
           },
         };
