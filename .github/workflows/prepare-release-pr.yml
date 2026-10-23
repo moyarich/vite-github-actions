@@ -11,9 +11,9 @@ on:
       version-bump:
         description: Version bump
         type: choice
-        options: [patch, minor, major]
+        options: [package-json, patch, minor, major]
         required: true
-        default: patch
+        default: package-json
       dry-run:
         description: Preview without opening a PR
         type: boolean
