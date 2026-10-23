@@ -10,7 +10,6 @@ import {
 } from "node:fs";
 import {
   dirname,
-  extname,
   isAbsolute,
   join,
   relative,
