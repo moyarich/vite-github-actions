@@ -38,8 +38,9 @@ jobs:
            github.event.workflow_run.event == 'push' &&
            github.event.workflow_run.head_repository.full_name == github.repository &&
            github.event.workflow_run.head_branch == 'main') }}
-    uses: moyarich/reusable-workflows/.github/workflows/reusable_npm-package-lock.yml@main
+    uses: moyarich/reusable-workflows/.github/workflows/reusable_self-heal_package-lock.yml@main
     with:
+      mode: fix
       commit: ${{ github.event_name == 'workflow_run' || inputs.commit }}
       node-version: "24"
     secrets:
@@ -52,7 +53,7 @@ jobs:
           ((github.event_name == 'workflow_dispatch' && inputs.repair != 'package-lock') ||
            (github.event_name == 'workflow_run' && needs.package-lock.result == 'success')) &&
           (needs.package-lock.result == 'success' || needs.package-lock.result == 'skipped') }}
-    uses: moyarich/reusable-workflows/.github/workflows/reusable_prettier.yml@main
+    uses: moyarich/reusable-workflows/.github/workflows/reusable_self-heal-prettier.yml@main
     with:
       mode: fix
       prettier-config: this-repository
