@@ -15,6 +15,7 @@ import {
   relative,
   resolve,
   sep,
+  win32,
 } from "node:path";
 import type { Plugin } from "vite";
 
@@ -325,7 +326,7 @@ export function githubActions(options: GithubActionsOptions = {}): Plugin {
             minify: false,
             rollupOptions: {
               input: { action: source },
-              output: { entryFileNames: dest.split(/[\\/]/).at(-1) },
+              output: { entryFileNames: win32.basename(dest) },
             },
           },
         };
