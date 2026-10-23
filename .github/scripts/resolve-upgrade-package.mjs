@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /** Resolve a dispatch package selector to an exact tracked workspace manifest. */
 import { readFile, readdir, realpath } from "node:fs/promises";
-import { resolve, relative, dirname, join, isAbsolute, sep } from "node:path";
+import { relative, dirname, join, isAbsolute, sep } from "node:path";
 import { appendFile } from "node:fs/promises";
 
 const root = process.cwd();
