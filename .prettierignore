@@ -2,3 +2,5 @@ node_modules/
 dist/
 coverage/
 package-lock.json
+# GitHub workflow changes require a workflow-enabled credential and review.
+.github/workflows/
