@@ -10,12 +10,12 @@ import {
 } from "node:fs";
 import {
   dirname,
-  extname,
   isAbsolute,
   join,
   relative,
   resolve,
   sep,
+  win32,
 } from "node:path";
 import type { Plugin } from "vite";
 
@@ -295,12 +295,12 @@ export function githubActions(options: GithubActionsOptions = {}): Plugin {
         if (!existsSync(metadataPath))
           throw new Error("Marketplace action requires root " + metadataFile);
         const yaml = readFileSync(metadataPath, "utf8");
-        if (!/^\\s*using:\\s*node(?:20|24)\\s*$/m.test(yaml))
+        if (!/^\s*using:\s*node(?:20|24)\s*$/m.test(yaml))
           throw new Error(
             "repositoryAction requires a Node.js action metadata runtime",
           );
         const declared = yaml.match(
-          /^\\s*main:\\s*["']?([^\\s"'#]+)["']?\\s*$/m,
+          /^\s*main:\s*["']?([^\s"'#]+)["']?\s*$/m,
         )?.[1];
         if (!declared || declared !== main)
           throw new Error(
@@ -328,7 +328,7 @@ export function githubActions(options: GithubActionsOptions = {}): Plugin {
             minify: false,
             rollupOptions: {
               input: { action: source },
-              output: { entryFileNames: dest.split(/[\\\\/]/).at(-1) },
+              output: { entryFileNames: win32.basename(dest) },
             },
           },
         };
