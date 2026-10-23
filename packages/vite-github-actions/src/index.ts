@@ -10,7 +10,6 @@ import {
 } from "node:fs";
 import {
   dirname,
-  extname,
   isAbsolute,
   join,
   relative,
@@ -326,7 +325,7 @@ export function githubActions(options: GithubActionsOptions = {}): Plugin {
             minify: false,
             rollupOptions: {
               input: { action: source },
-              output: { entryFileNames: dest.split(/[\\\\/]/).at(-1) },
+              output: { entryFileNames: dest.split(/[\\/]/).at(-1) },
             },
           },
         };
