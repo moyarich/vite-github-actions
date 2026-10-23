@@ -1,38 +1,51 @@
 name: CI
-
 on:
   push:
     branches: [main]
   pull_request:
+    paths:
+      - "src/**"
+      - "packages/**"
+      - "apps/**"
+      - "actions/**"
+      - "tests/**"
+      - ".storybook/**"
+      - "**/.storybook/**"
+      - "**/*.stories.*"
+      - "**/*.story.*"
+      - "**/*.spec.*"
+      - "**/*.specs.*"
+      - "**/playwright.config.*"
+      - "playwright.config.*"
+      - "vitest.config.*"
+      - "package.json"
+      - "package-lock.json"
+      - "eslint.config.*"
+      - ".prettierignore"
+      - "tsconfig*.json"
+      - ".github/workflows/**"
+      - ".github/actionlint.yaml"
+      - ".github/check-dist.config.yml"
   workflow_dispatch:
-
+    inputs:
+      checkout-sha:
+        description: Exact commit SHA to validate (e.g. after self-heal)
+        type: string
+        required: false
+        default: ""
 permissions:
   contents: read
-
+  packages: read
+  pull-requests: read
+concurrency:
+  group: ci-${{ github.repository }}-${{ github.workflow }}-${{ github.event.pull_request.number || inputs.checkout-sha || github.ref }}
+  cancel-in-progress: false
 jobs:
-  lint-workflows:
-    name: Validate workflow syntax
-    permissions:
-      contents: read
-    # Merge the reusable workflow upstream before adding or renaming this caller.
+  actionlint:
+    name: Workflows / actionlint
     uses: moyarich/reusable-workflows/.github/workflows/reusable_actionlint.yml@main
-
-  checks:
-    name: Monorepo checks
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          persist-credentials: false
-      - uses: actions/setup-node@v7
-        with:
-          node-version: "24"
-          cache: npm
-      - run: npm ci --include=optional
-      - run: npm run checks
-      - run: npm run pack:check
-      - name: Summary
-        if: always()
-        env:
-          STATUS: ${{ job.status }}
-        run: echo "## Monorepo checks — $STATUS" >> "$GITHUB_STEP_SUMMARY"
+  cli:
+    name: Node / build, lint, typecheck, Vitest, pack
+    uses: moyarich/reusable-workflows/.github/workflows/reusable_ci_cli.yml@main
+    with:
+      checkout-sha: ${{ inputs.checkout-sha || '' }}
