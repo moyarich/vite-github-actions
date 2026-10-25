@@ -39,6 +39,8 @@ export interface RepositoryActionOptions {
   main?: string;
 }
 export interface GithubActionsOptions {
+  /** Root for action paths, relative to the invocation directory (default: process.cwd()). */
+  projectRoot?: string;
   /** Build a single action with metadata at repository root. */
   repositoryAction?: RepositoryActionOptions;
   /** Legacy action metadata location (default: actions). */
@@ -300,7 +302,7 @@ export function generateActionDistributions(
   }
 }
 export function githubActions(options: GithubActionsOptions = {}): Plugin {
-  const root = process.cwd();
+  const root = resolve(process.cwd(), options.projectRoot ?? ".");
   const sources = resolve(root, options.sourcesDir ?? "src/actions");
   const output = resolve(
     root,
