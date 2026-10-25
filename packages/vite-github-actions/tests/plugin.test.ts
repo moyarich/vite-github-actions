@@ -16,6 +16,10 @@ describe("vite-github-actions", () => {
       rmSync(root, { recursive: true, force: true });
     }
   });
+  it("accepts a project root above the package directory", () => {
+    const plugin = githubActions({ projectRoot: "../..", entries: {} });
+    expect(plugin.name).toBe("vite-github-actions");
+  });
   it("provides a Vite plugin", () => {
     expect(githubActions().name).toBe("vite-github-actions");
   });
