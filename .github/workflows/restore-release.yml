@@ -11,18 +11,18 @@ on:
         description: Select a publishable workspace package
         required: true
         type: choice
-        default: all
+        default: "all"
         options:
-          - all
-          - packages/example
+          - "all"
+          - "packages/example"
+          - "packages/vite-github-actions"
       target-branch:
         description: Branch used to resolve the package path and changelog
         required: true
         default: main
         type: string
       restore-source:
-        description:
-          "Historical source: commit:<sha>, tag:<tag>, run:<id>, artifact:<id>,
+        description: "Historical source: commit:<sha>, tag:<tag>, run:<id>, artifact:<id>,
           or github-url:<supported GitHub URL>"
         required: true
         type: string
@@ -40,7 +40,7 @@ on:
         default: ""
         type: string
       skip-finalized:
-        description: Skip finalized releases without modifying them (for bulk
+        description: Skip finalized releases without modifying them (for bulk 
           live recovery)
         required: true
         default: false
@@ -58,7 +58,8 @@ jobs:
     name: "job: Workflow parameters"
     permissions:
       contents: read
-    uses: moyarich/reusable-workflows/.github/workflows/reusable_dispatch-input-summary.yml@main
+    uses: 
+      moyarich/reusable-workflows/.github/workflows/reusable_dispatch-input-summary.yml@main
     with:
       parameters-json: ${{ toJSON(inputs) }}
       heading: "restore release · Dispatch parameters"
@@ -68,7 +69,8 @@ jobs:
       contents: write
       packages: read
       pull-requests: read
-    uses: moyarich/reusable-workflows/.github/workflows/reusable_bulk-restore-release.yml@main
+    uses: 
+      moyarich/reusable-workflows/.github/workflows/reusable_bulk-restore-release.yml@main
     with:
       package: ${{ inputs.package }}
       target-branch: ${{ inputs.target-branch }}

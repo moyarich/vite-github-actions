@@ -7,12 +7,17 @@ on:
   workflow_dispatch:
     inputs:
       package:
-        description: all, package directory, or package name
-        type: string
+        description: Select a publishable workspace package
+        type: choice
         required: true
-        default: all
+        default: "all"
+        options:
+          - "all"
+          - "packages/example"
+          - "packages/vite-github-actions"
       dist-path:
-        description: "Distribution path template. Supports {packageDir}, {package}, {packageName}, {workspace}; blank uses repository configuration or {packageDir}/dist."
+        description: "Distribution path template. Supports {packageDir}, {package},
+          {packageName}, {workspace}; blank uses repository configuration or {packageDir}/dist."
         type: string
         default: ""
       build-command:
@@ -29,7 +34,8 @@ on:
         type: boolean
         default: true
       commit:
-        description: Commit updated output only when dry-run is false (single package only)
+        description: Commit updated output only when dry-run is false (single 
+          package only)
         type: boolean
         default: false
       node-caching:
@@ -58,7 +64,8 @@ jobs:
   check-dist:
     permissions:
       contents: write
-    uses: moyarich/reusable-workflows/.github/workflows/reusable_self-heal-check-dist.yml@main
+    uses: 
+      moyarich/reusable-workflows/.github/workflows/reusable_self-heal-check-dist.yml@main
     with:
       package: ${{ inputs.package }}
       dist-path: ${{ inputs.dist-path }}

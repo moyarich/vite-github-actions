@@ -10,10 +10,11 @@ on:
         description: Select a publishable workspace package
         required: true
         type: choice
-        default: all
+        default: "all"
         options:
-          - all
-          - packages/example
+          - "all"
+          - "packages/example"
+          - "packages/vite-github-actions"
       target-branch:
         description: Release target branch
         required: true
@@ -47,7 +48,8 @@ jobs:
       contents: write
       packages: read
       pull-requests: read
-    uses: moyarich/reusable-workflows/.github/workflows/reusable_bulk-reset-release.yml@main
+    uses: 
+      moyarich/reusable-workflows/.github/workflows/reusable_bulk-reset-release.yml@main
     with:
       package: ${{ inputs.package }}
       target-branch: ${{ inputs.target-branch }}
