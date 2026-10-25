@@ -64,7 +64,10 @@ describe("generated action distributions", () => {
         'name: Composite\nruns:\n  using: composite\n  steps:\n    - shell: bash\n      run: node "$GITHUB_ACTION_PATH/run.mjs"\n',
       );
       write("runtime/run.ts", "const value: number = 42; console.log(value);");
-      write("runtime/legacy.cts", "const value: number = 3; module.exports = value;");
+      write(
+        "runtime/legacy.cts",
+        "const value: number = 3; module.exports = value;",
+      );
       write("runtime/schema.json", '{"ok":true}');
       const config = {
         metadataDir: "metadata",
@@ -79,13 +82,26 @@ describe("generated action distributions", () => {
         },
       };
       generateActionDistributions(config, [], root);
-      expect(readFileSync(join(root, "actions/composite/run.mjs"), "utf8")).not.toContain(": number");
-      expect(readFileSync(join(root, "actions/composite/run.mjs"), "utf8")).toContain("42");
-      expect(readFileSync(join(root, "actions/composite/legacy.cjs"), "utf8")).not.toContain(": number");
-      expect(readFileSync(join(root, "actions/composite/schema.json"), "utf8")).toBe('{"ok":true}');
+      expect(
+        readFileSync(join(root, "actions/composite/run.mjs"), "utf8"),
+      ).not.toContain(": number");
+      expect(
+        readFileSync(join(root, "actions/composite/run.mjs"), "utf8"),
+      ).toContain("42");
+      expect(
+        readFileSync(join(root, "actions/composite/legacy.cjs"), "utf8"),
+      ).not.toContain(": number");
+      expect(
+        readFileSync(join(root, "actions/composite/schema.json"), "utf8"),
+      ).toBe('{"ok":true}');
       expect(() =>
         generateActionDistributions(
-          { ...config, runtimeFiles: { composite: { "not-typescript.ts": "runtime/run.ts" } } },
+          {
+            ...config,
+            runtimeFiles: {
+              composite: { "not-typescript.ts": "runtime/run.ts" },
+            },
+          },
           [],
           root,
         ),

@@ -19,7 +19,13 @@ import {
   win32,
 } from "node:path";
 import type { Plugin } from "vite";
-import { transpileModule, ModuleKind, ScriptTarget, DiagnosticCategory, flattenDiagnosticMessageText } from "typescript";
+import {
+  transpileModule,
+  ModuleKind,
+  ScriptTarget,
+  DiagnosticCategory,
+  flattenDiagnosticMessageText,
+} from "typescript";
 
 /** Additional runtime files copied next to a generated action's metadata. */
 export type ActionFiles = Record<string, Record<string, string>>;
@@ -221,22 +227,40 @@ export function generateActionDistributions(
       )) {
         const from = safePath(root, source, "Runtime file");
         const destinationFile = safePath(outputDir, target, "Runtime target");
-        if (from.endsWith(".ts") || from.endsWith(".mts") || from.endsWith(".cts") || from.endsWith(".tsx")) {
+        if (
+          from.endsWith(".ts") ||
+          from.endsWith(".mts") ||
+          from.endsWith(".cts") ||
+          from.endsWith(".tsx")
+        ) {
           if (!/\.(?:mjs|cjs|js)$/.test(target))
-            throw new Error("TypeScript runtime target must be a JavaScript file: " + target);
+            throw new Error(
+              "TypeScript runtime target must be a JavaScript file: " + target,
+            );
           assertNoSymlinks(from, root);
           assertNoSymlinks(destinationFile, stage);
           const result = transpileModule(readFileSync(from, "utf8"), {
             fileName: from,
             compilerOptions: {
-              module: target.endsWith(".cjs") ? ModuleKind.CommonJS : ModuleKind.ESNext,
+              module: target.endsWith(".cjs")
+                ? ModuleKind.CommonJS
+                : ModuleKind.ESNext,
               target: ScriptTarget.ES2022,
             },
             reportDiagnostics: true,
           });
-          const errors = (result.diagnostics ?? []).filter((d) => d.category === DiagnosticCategory.Error);
+          const errors = (result.diagnostics ?? []).filter(
+            (d) => d.category === DiagnosticCategory.Error,
+          );
           if (errors.length)
-            throw new Error("TypeScript runtime transpilation failed: " + source + ": " + errors.map((d) => flattenDiagnosticMessageText(d.messageText, "\n")).join("; "));
+            throw new Error(
+              "TypeScript runtime transpilation failed: " +
+                source +
+                ": " +
+                errors
+                  .map((d) => flattenDiagnosticMessageText(d.messageText, "\n"))
+                  .join("; "),
+            );
           mkdirSync(dirname(destinationFile), { recursive: true });
           writeFileSync(destinationFile, result.outputText);
         } else {
