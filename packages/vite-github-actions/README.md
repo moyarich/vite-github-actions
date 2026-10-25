@@ -61,7 +61,7 @@ export default defineConfig({
       sharedChunks: true,
       runtimeFiles: {
         "check-dist": {
-          "select.mjs": "packages/cli/src/check-dist/select.mjs",
+          "select.mjs": "packages/cli/src/check-dist/select.ts",
           "config.schema.json":
             "reusable-configurations/check-dist-config.schema.json",
         },
@@ -78,7 +78,7 @@ Each directory under `metadataDir` contains an authored `action.yml`. The Vite b
 - `entries`: explicit action name to source entrypoint mapping; `includeDiscovered` adds automatic discovery
 - `entryNames`: source filenames used during discovery, including `{name}` replacement
 - `metadataDir`, `distributionDir`, `outputDir`: independent source, generated, and staging directories
-- `runtimeFiles`: per-action target path → tracked source file mapping
+- `runtimeFiles`: per-action target path → tracked source file mapping. JavaScript targets (`.js`, `.mjs`, `.cjs`) mapped from `.ts`, `.tsx`, `.mts`, or `.cts` sources are transpiled with TypeScript; other assets are copied unchanged. This strips types but does not bundle dependencies or resolve imports.
 - `copyMetadata`: copy other authored files alongside `action.yml` (default true)
 - `sharedChunks`: put entries under each action directory and chunks under `_assets`
 - `generateDistributions`: opt in to a full generated distribution
