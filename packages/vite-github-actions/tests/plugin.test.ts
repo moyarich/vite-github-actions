@@ -42,7 +42,7 @@ describe("generic Vite builds and copies", () => {
                 from: "packages/implementation/*.ts",
                 to: "generated/{name}.mjs",
               },
-            ],
+            ] },
           }),
         ],
       });
