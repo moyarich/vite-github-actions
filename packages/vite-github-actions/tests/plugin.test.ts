@@ -25,7 +25,7 @@ describe("vite-github-actions", () => {
       const config = plugin.config;
       if (typeof config !== "function")
         throw new Error("Expected Vite config function");
-      const result = config.call({} as never, {} as never) as {
+      const result = config.call({} as never, {} as never, { command: "build", mode: "production" }) as {
         build: { rollupOptions: { input: Record<string, string> } };
       };
       expect(result.build.rollupOptions.input.example).toBe(
@@ -58,7 +58,7 @@ describe("vite-github-actions", () => {
       });
       const config = plugin.config;
       if (typeof config !== "function") throw new Error("Expected config");
-      const result = config.call({} as never, {} as never) as {
+      const result = config.call({} as never, {} as never, { command: "build", mode: "production" }) as {
         build: { rollupOptions: { input: Record<string, string> } };
       };
       expect(result.build.rollupOptions.input.custom).toBe(
