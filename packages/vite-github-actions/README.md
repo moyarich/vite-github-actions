@@ -9,16 +9,18 @@ import { defineConfig } from "vite";
 import { githubActions } from "@moyarich/vite-github-actions";
 
 export default defineConfig({
-  plugins: [githubActions({
-    projectRoot: "../..",
-    metadataDir: "packages/actions/actions",
-    metadataPatterns: ["**/*.yml", "**/*.yaml"],
-    sourcesDir: "packages/cli/src",
-    outputDir: "packages/actions/dist/.bundles",
-    distributionDir: "actions",
-    sharedChunks: true,
-    assets: ["**/*.json"],
-  })],
+  plugins: [
+    githubActions({
+      projectRoot: "../..",
+      metadataDir: "packages/actions/actions",
+      metadataPatterns: ["**/*.yml", "**/*.yaml"],
+      sourcesDir: "packages/cli/src",
+      outputDir: "packages/actions/dist/.bundles",
+      distributionDir: "actions",
+      sharedChunks: true,
+      assets: ["**/*.json"],
+    }),
+  ],
 });
 ```
 
@@ -36,7 +38,7 @@ githubActions({
   entryNames: ["start.ts"],
   outputDir: "build/bundles",
   distributionDir: "build/actions",
-})
+});
 ```
 
 The plugin does **not** require metadata named `action.yml`. `metadataPatterns` controls discovery, and paths are supplied by each consuming repository. Relative metadata directories become action identities (separated with hyphens); duplicate identities are rejected.
@@ -50,7 +52,7 @@ githubActions({
     metadataFile: "metadata.yaml",
     main: "dist/start.mjs",
   },
-})
+});
 ```
 
 A standalone Node action must declare the same compiled entry in its metadata. The plugin doesn't publish Marketplace listings.
