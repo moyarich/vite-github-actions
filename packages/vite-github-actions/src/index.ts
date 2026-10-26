@@ -120,7 +120,7 @@ export function githubActions(options: GithubActionsOptions = {}): Plugin {
     name: "vite-github-actions",
     apply: "build",
     resolveId(id) {
-      if (id === "\\0vite-github-actions:copy-only") return id;
+      if (id === "virtual:vite-github-actions-copy-only") return "\\0vite-github-actions:copy-only";
       return null;
     },
     load(id) {
@@ -142,7 +142,7 @@ export function githubActions(options: GithubActionsOptions = {}): Plugin {
             outDir: staging,
             emptyOutDir: true,
             rollupOptions: {
-              input: { __copy_only__: "\\0vite-github-actions:copy-only" },
+              input: { __copy_only__: "virtual:vite-github-actions-copy-only" },
             },
           },
         };
