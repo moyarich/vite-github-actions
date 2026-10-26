@@ -56,7 +56,8 @@ describe("vite-github-actions", () => {
         metadataDir: "definitions",
         metadataPatterns: ["**/metadata.yaml"],
         sourcesDir: "implementations",
-        entryNames: ["unrelated/start.ts"],
+        entryNames: ["start.ts"],
+        sourceDirs: { custom: "implementations/unrelated" },
         distributionDir: "dist-actions",
       });
       const config = plugin.config;
