@@ -410,7 +410,7 @@ export function githubActions(options: GithubActionsOptions = {}): Plugin {
       if (!names.length) throw new Error("No action entries configured");
       if (
         (options.outputDir ?? "actions/dist") ===
-          (options.distributionDir ?? "actions")
+        (options.distributionDir ?? "actions")
       )
         throw new Error(
           "Bundle output and distribution cannot be the same directory",
