@@ -120,7 +120,8 @@ export function githubActions(options: GithubActionsOptions = {}): Plugin {
     name: "vite-github-actions",
     apply: "build",
     resolveId(id) {
-      if (id === "virtual:vite-github-actions-copy-only") return "\\0vite-github-actions:copy-only";
+      if (id === "virtual:vite-github-actions-copy-only")
+        return "\\0vite-github-actions:copy-only";
       return null;
     },
     load(id) {
