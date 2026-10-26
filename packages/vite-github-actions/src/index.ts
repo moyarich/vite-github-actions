@@ -1,5 +1,22 @@
-import { cpSync, existsSync, globSync, mkdirSync, renameSync, rmSync, statSync } from "node:fs";
-import { basename, dirname, extname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import {
+  cpSync,
+  existsSync,
+  globSync,
+  mkdirSync,
+  renameSync,
+  rmSync,
+  statSync,
+} from "node:fs";
+import {
+  basename,
+  dirname,
+  extname,
+  isAbsolute,
+  join,
+  relative,
+  resolve,
+  sep,
+} from "node:path";
 import type { Plugin } from "vite";
 
 /** A file glob and destination template, relative to projectRoot. */
@@ -29,12 +46,16 @@ interface ResolvedFile {
 
 function within(root: string, value: string): boolean {
   const rel = relative(root, value);
-  return rel === "" || (rel !== ".." && !rel.startsWith(".." + sep) && !isAbsolute(rel));
+  return (
+    rel === "" ||
+    (rel !== ".." && !rel.startsWith(".." + sep) && !isAbsolute(rel))
+  );
 }
 
 function safe(root: string, value: string): string {
   const full = resolve(root, value);
-  if (!within(root, full)) throw new Error("Path escapes projectRoot: " + value);
+  if (!within(root, full))
+    throw new Error("Path escapes projectRoot: " + value);
   return full;
 }
 
@@ -59,11 +80,19 @@ function mappingFiles(root: string, mappings: FileMapping[]): ResolvedFile[] {
         .replaceAll("{name}", name)
         .replaceAll("{parent}", parent)
         .replaceAll("{relative}", remainder);
-      const destination = destinationTemplate.includes("{") && destinationTemplate.includes("}")
-        ? (() => { throw new Error("Unknown destination placeholder: " + destinationTemplate); })()
-        : safe(root, mapping.to.endsWith("/") || !extname(destinationTemplate)
-          ? join(destinationTemplate, remainder)
-          : destinationTemplate);
+      const destination =
+        destinationTemplate.includes("{") && destinationTemplate.includes("}")
+          ? (() => {
+              throw new Error(
+                "Unknown destination placeholder: " + destinationTemplate,
+              );
+            })()
+          : safe(
+              root,
+              mapping.to.endsWith("/") || !extname(destinationTemplate)
+                ? join(destinationTemplate, remainder)
+                : destinationTemplate,
+            );
       results.push({ source, destination });
     }
   }
@@ -73,7 +102,8 @@ function mappingFiles(root: string, mappings: FileMapping[]): ResolvedFile[] {
 function assertDistinct(files: ResolvedFile[]): void {
   const seen = new Set<string>();
   for (const file of files) {
-    if (seen.has(file.destination)) throw new Error("Duplicate destination: " + file.destination);
+    if (seen.has(file.destination))
+      throw new Error("Duplicate destination: " + file.destination);
     seen.add(file.destination);
   }
 }
@@ -91,11 +121,17 @@ export function githubActions(options: GithubActionsOptions = {}): Plugin {
       built = mappingFiles(root, options.builds ?? []);
       copied = mappingFiles(root, options.copies ?? []);
       assertDistinct([...built, ...copied]);
-      if (!built.length && !copied.length) throw new Error("Provide builds or copies");
-      outputNames = Object.fromEntries(built.map((entry, index) => [String(index), entry.source]));
-      if (!built.length) return { build: { write: false, rollupOptions: { input: {} } } };
+      if (!built.length && !copied.length)
+        throw new Error("Provide builds or copies");
+      outputNames = Object.fromEntries(
+        built.map((entry, index) => [String(index), entry.source]),
+      );
+      if (!built.length)
+        return { build: { write: false, rollupOptions: { input: {} } } };
       return {
-        ssr: { noExternal: options.bundleDependencies === false ? undefined : true },
+        ssr: {
+          noExternal: options.bundleDependencies === false ? undefined : true,
+        },
         build: {
           ssr: true,
           target: options.target ?? "node24",
