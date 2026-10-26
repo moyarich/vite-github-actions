@@ -72,7 +72,8 @@ function mappingFiles(root: string, mappings: FileMapping[]): ResolvedFile[] {
     if (!names.length) throw new Error("No files match: " + mapping.from);
     for (const file of names) {
       const source = safe(root, file);
-      if (lstatSync(source).isSymbolicLink()) throw new Error("Symlink source not supported: " + source);
+      if (lstatSync(source).isSymbolicLink())
+        throw new Error("Symlink source not supported: " + source);
       if (!statSync(source).isFile()) continue;
       const name = basename(source, extname(source));
       const parent = basename(dirname(source));
