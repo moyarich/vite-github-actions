@@ -30,7 +30,10 @@ export default defineConfig({
     githubActions({
       projectRoot: "../..",
       builds: [
-        { from: "packages/cli/src/*/action-entry.ts", to: "actions/{parent}/index.mjs" },
+        {
+          from: "packages/cli/src/*/action-entry.ts",
+          to: "actions/{parent}/index.mjs",
+        },
       ],
       copies: [
         { from: "packages/actions/actions/**/*", to: "actions/" },
@@ -48,9 +51,14 @@ This illustrates one consumer's layout, **not required naming conventions**. Add
 ```ts
 githubActions({
   projectRoot: ".",
-  builds: [{ from: "implementation/**/runner.ts", to: "artifacts/{parent}/runner.mjs" }],
+  builds: [
+    {
+      from: "implementation/**/runner.ts",
+      to: "artifacts/{parent}/runner.mjs",
+    },
+  ],
   copies: [{ from: "definitions/**/*", to: "artifacts/definitions/" }],
-})
+});
 ```
 
 Build mappings are explicit and remain valid for arbitrary names and file hierarchies. No metadata parsing or action-name inference is performed.
