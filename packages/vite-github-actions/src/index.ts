@@ -41,7 +41,7 @@ export interface GithubActionsOptions {
   projectRoot?: string;
   /** Build a single action with metadata at repository root. */
   repositoryAction?: RepositoryActionOptions;
-  /** Legacy directory scanned for source action entrypoints. */
+  /** Root for implementation files, independent of metadata layout. */
   sourcesDir?: string;
   /** Vite intermediate bundle output (default: actions/dist). */
   outputDir?: string;
@@ -58,7 +58,7 @@ export interface GithubActionsOptions {
   copyMetadata?: boolean;
   /** Place JS bundles at <name>/index.mjs with shared chunks in _assets. */
   sharedChunks?: boolean;
-  /** Per-action source filename discovery candidates (default index.ts, <name>-cli.ts). */
+  /** Source-root-relative entry paths with an optional {name} placeholder. */
   entryNames?: string[];
   /** Glob patterns for colocated assets, including nested JSON files. */
   assets?: string[];
@@ -125,11 +125,11 @@ function discoverMetadataEntries(
       continue;
     const candidates = (
       options.entryNames ?? [
-        "action-entry.ts",
-        "entry.ts",
-        "index.ts",
-        "{name}.ts",
-        "{name}-cli.ts",
+        "{name}/action-entry.ts",
+        "{name}/entry.ts",
+        "{name}/index.ts",
+        "{name}/{name}.ts",
+        "{name}/{name}-cli.ts",
       ]
     ).map((name) => name.replaceAll("{name}", item.name));
     const entry = candidates.find(
