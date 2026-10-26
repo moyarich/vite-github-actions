@@ -137,6 +137,20 @@ export function githubActions(options: GithubActionsOptions = {}): Plugin {
       assertDistinct([...built, ...copied]);
       if (!built.length && !copied.length)
         throw new Error("Provide build.input or copy");
+      // Keep shared chunks and assets inside the common distribution tree.
+      // Otherwise entries under actions/<name>/ would import ../../_chunks
+      // from the repository root, outside the published actions directory.
+      let distributionRoot = dirname(built[0]?.destination ?? root);
+      for (const file of built.slice(1)) {
+        while (!within(distributionRoot, file.destination)) {
+          const parent = dirname(distributionRoot);
+          if (parent === distributionRoot) throw new Error("No common output directory");
+          distributionRoot = parent;
+        }
+      }
+      const sharedPrefix = relative(root, distributionRoot).split(sep).join("/");
+      const sharedFile = (folder: string, template: string) =>
+        [sharedPrefix, folder, template].filter(Boolean).join("/");
       outputNames = Object.fromEntries(
         built.map((entry, index) => [String(index), entry.source]),
       );
@@ -170,8 +184,8 @@ export function githubActions(options: GithubActionsOptions = {}): Plugin {
                   throw new Error("Unknown build entry: " + chunk.name);
                 return relative(root, item.destination).split(sep).join("/");
               },
-              chunkFileNames: "_chunks/[name]-[hash].mjs",
-              assetFileNames: "_assets/[name]-[hash][extname]",
+              chunkFileNames: sharedFile("_chunks", "[name]-[hash].mjs"),
+              assetFileNames: sharedFile("_assets", "[name]-[hash][extname]"),
             },
           },
         },
