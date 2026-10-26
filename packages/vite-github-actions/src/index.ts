@@ -1,481 +1,135 @@
-import {
-  cpSync,
-  existsSync,
-  lstatSync,
-  mkdirSync,
-  readFileSync,
-  readdirSync,
-  renameSync,
-  writeFileSync,
-  rmSync,
-} from "node:fs";
-import {
-  dirname,
-  isAbsolute,
-  join,
-  relative,
-  resolve,
-  sep,
-  win32,
-} from "node:path";
+import { cpSync, existsSync, globSync, mkdirSync, renameSync, rmSync, statSync } from "node:fs";
+import { basename, dirname, extname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import type { Plugin } from "vite";
-import {
-  transpileModule,
-  ModuleKind,
-  ScriptTarget,
-  DiagnosticCategory,
-  flattenDiagnosticMessageText,
-} from "typescript";
 
-/** A standalone action exposed as owner/repository@ref in GitHub Marketplace. */
-export interface RepositoryActionOptions {
-  /** JavaScript or TypeScript entrypoint, relative to repository root. */
-  entry: string;
-  /** Root metadata path, action.yml or action.yaml (default: action.yml). */
-  metadataFile?: string;
-  /** Compiled entry relative to repository root (default: dist/index.mjs). */
-  main?: string;
+/** A file glob and destination template, relative to projectRoot. */
+export interface FileMapping {
+  from: string;
+  /** Destination file or directory. Supports {name}, {parent}, and {relative}. */
+  to: string;
 }
+
 export interface GithubActionsOptions {
-  /** Root for action paths, relative to the invocation directory (default: process.cwd()). */
+  /** Base directory for source and destination paths. Defaults to the Vite invocation directory. */
   projectRoot?: string;
-  /** Build a single action with metadata at repository root. */
-  repositoryAction?: RepositoryActionOptions;
-  /** Root for implementation files, independent of metadata layout. */
-  sourcesDir?: string;
-  /** Vite intermediate bundle output (default: actions/dist). */
-  outputDir?: string;
+  /** Source files to bundle using Vite. */
+  builds?: FileMapping[];
+  /** Files to copy without changing their contents. */
+  copies?: FileMapping[];
+  /** Node build target. */
   target?: string;
+  /** Bundle imported packages, rather than leaving them external. */
   bundleDependencies?: boolean;
-  validateMetadata?: boolean;
-  /** Glob patterns for action metadata, relative to metadataDir. */
-  metadataPatterns?: string[];
-  /** Source metadata directories. */
-  metadataDir?: string;
-  /** Public action directory. When generation is enabled defaults to actionsDir. */
-  distributionDir?: string;
-  /** Copy additional metadata files (e.g. README) from each source action directory. */
-  copyMetadata?: boolean;
-  /** Place JS bundles at <name>/index.mjs with shared chunks in _assets. */
-  sharedChunks?: boolean;
-  /** Source-root-relative entry paths with an optional {name} placeholder. */
-  entryNames?: string[];
-  /** Per-action source directories, relative to projectRoot. */
-  sourceDirs?: Record<string, string>;
-  /** Glob patterns for colocated assets, including nested JSON files. */
-  assets?: string[];
 }
-function inside(base: string, target: string): boolean {
-  const rel = relative(base, target);
-  return (
-    rel === "" ||
-    (rel !== ".." && !rel.startsWith(".." + sep) && !isAbsolute(rel))
-  );
+
+interface ResolvedFile {
+  source: string;
+  destination: string;
 }
-function safePath(base: string, path: string, label: string): string {
-  const target = resolve(base, path);
-  if (!inside(base, target))
-    throw new Error(`${label} escapes base directory: ${path}`);
-  return target;
+
+function within(root: string, value: string): boolean {
+  const rel = relative(root, value);
+  return rel === "" || (rel !== ".." && !rel.startsWith(".." + sep) && !isAbsolute(rel));
 }
-function assertNoSymlinks(path: string, boundary: string): void {
-  let current = path;
-  while (inside(boundary, current)) {
-    if (existsSync(current) && lstatSync(current).isSymbolicLink())
-      throw new Error("Refusing symlinked path: " + current);
-    if (current === boundary) break;
-    current = dirname(current);
-  }
+
+function safe(root: string, value: string): string {
+  const full = resolve(root, value);
+  if (!within(root, full)) throw new Error("Path escapes projectRoot: " + value);
+  return full;
 }
-function copySafe(
-  from: string,
-  to: string,
-  sourceBoundary: string,
-  destBoundary: string,
-): void {
-  assertNoSymlinks(from, sourceBoundary);
-  assertNoSymlinks(to, destBoundary);
-  if (!existsSync(from))
-    throw new Error("Missing distribution source: " + from);
-  mkdirSync(dirname(to), { recursive: true });
-  cpSync(from, to, {
-    recursive: true,
-    filter(path) {
-      if (lstatSync(path).isSymbolicLink())
-        throw new Error("Refusing symlink in source: " + path);
-      return true;
-    },
-  });
+
+function globBase(pattern: string): string {
+  const prefix = pattern.split(/[?*[{]/, 1)[0];
+  return prefix.endsWith("/") ? prefix.slice(0, -1) : dirname(prefix);
 }
-function discoverMetadataEntries(
-  root: string,
-  options: GithubActionsOptions,
-): Record<string, string> {
-  const sourceRoot = resolve(root, options.sourcesDir ?? "src/actions");
-  const entries: Record<string, string> = {};
-  for (const { name, yaml } of discoverMetadata(root, options)) {
-    if (!/^\s*using:\s*node(?:20|24)\s*$/m.test(yaml)) continue;
-    const candidates = (
-      options.entryNames ?? [
-        "{name}/action-entry.ts",
-        "{name}/entry.ts",
-        "{name}/index.ts",
-        "{name}/{name}.ts",
-      ]
-    ).map((pattern) => pattern.replaceAll("{name}", name));
-    const candidateRoot = options.sourceDirs?.[name]
-      ? safePath(root, options.sourceDirs[name], "Action source")
-      : sourceRoot;
-    const entry = candidates
-      .map((p) => safePath(candidateRoot, p, "Action entry"))
-      .find(existsSync);
-    if (!entry)
-      throw new Error(
-        "Missing Node entry for " + name + ": " + candidates.join(", "),
-      );
-    entries[name] = entry;
-  }
-  return entries;
-}
-function discoverMetadata(
-  root: string,
-  options: GithubActionsOptions,
-): Array<{ name: string; file: string; yaml: string }> {
-  const directory = resolve(root, options.metadataDir ?? "actions");
-  const patterns = options.metadataPatterns ?? ["**/*.yml", "**/*.yaml"];
-  const discovered = new Map<
-    string,
-    { name: string; file: string; yaml: string }
-  >();
-  for (const pathname of collectedFiles(directory)) {
-    if (!patterns.some((pattern) => assetMatch(pattern, pathname))) continue;
-    const file = safePath(directory, pathname, "Metadata file");
-    const yaml = readFileSync(file, "utf8");
-    if (!/^\s*using:\s*(?:node20|node24|composite)\s*$/m.test(yaml)) continue;
-    const parent = dirname(pathname);
-    const name =
-      parent === "."
-        ? pathname.replace(/\.[^.]+$/, "")
-        : parent.split("/").join("-");
-    if (!/^[a-zA-Z][\w-]*$/.test(name))
-      throw new Error("Invalid action identity: " + name);
-    if (discovered.has(name))
-      throw new Error("Ambiguous metadata for action: " + name);
-    discovered.set(name, { name, file, yaml });
-  }
-  return [...discovered.values()].sort((a, b) => a.name.localeCompare(b.name));
-}
-function collectedFiles(dir: string, base = dir): string[] {
-  if (!existsSync(dir)) return [];
-  return readdirSync(dir, { withFileTypes: true }).flatMap((item) => {
-    const full = join(dir, item.name);
-    if (item.isSymbolicLink()) throw new Error("Refusing symlink: " + full);
-    return item.isDirectory()
-      ? collectedFiles(full, base)
-      : item.isFile()
-        ? [relative(base, full).split(sep).join("/")]
-        : [];
-  });
-}
-function assetMatch(pattern: string, file: string): boolean {
-  if (pattern.startsWith("**/"))
-    return (
-      assetMatch(pattern.slice(3), file) ||
-      file
-        .split("/")
-        .some((_, i, parts) =>
-          assetMatch(pattern.slice(3), parts.slice(i).join("/")),
-        )
-    );
-  if (pattern.startsWith("*."))
-    return !file.includes("/") && file.endsWith(pattern.slice(1));
-  return pattern === file;
-}
-function autoFiles(
-  root: string,
-  options: GithubActionsOptions,
-  name: string,
-  yaml: string,
-): Record<string, string> {
-  const dir = safePath(
-    root,
-    options.sourceDirs?.[name] ??
-      join(options.sourcesDir ?? "src/actions", name),
-    "Action source",
-  );
-  const available = collectedFiles(dir);
-  const result: Record<string, string> = {};
-  for (const match of yaml.matchAll(/\$GITHUB_ACTION_PATH\/([\w./-]+)/g)) {
-    const target = match[1];
-    const candidates = [target, target.replace(/\.(mjs|js|cjs)$/, ".ts")];
-    const source = candidates.find((file) => available.includes(file));
-    if (source)
-      result[target] = relative(root, join(dir, source)).split(sep).join("/");
-  }
-  for (const file of available) {
-    if ((options.assets ?? []).some((pattern) => assetMatch(pattern, file)))
-      result[file] ??= relative(root, join(dir, file)).split(sep).join("/");
-  }
-  return result;
-}
-/**
- * Assemble a complete, replaceable distribution from metadata, Vite output,
- * and declared runtime files. Sources must be outside the generated tree.
- */
-export function generateActionDistributions(
-  options: GithubActionsOptions,
-  names: string[],
-  root = process.cwd(),
-): void {
-  const metadata = resolve(root, options.metadataDir ?? "actions");
-  const destination = resolve(root, options.distributionDir ?? "actions");
-  const bundles = resolve(root, options.outputDir ?? "actions/dist");
-  if (
-    !inside(root, metadata) ||
-    !inside(root, destination) ||
-    !inside(root, bundles)
-  )
-    throw new Error("Action paths must remain inside the project root");
-  if (
-    metadata === destination ||
-    inside(destination, metadata) ||
-    inside(destination, bundles)
-  )
-    throw new Error(
-      "Authoritative metadata and staged bundles must be outside distributionDir",
-    );
-  if (inside(metadata, destination) || inside(bundles, destination))
-    throw new Error(
-      "Distribution directory must not overlap source/staging directories",
-    );
-  if (destination === root) throw new Error("Refusing to replace project root");
-  assertNoSymlinks(destination, root);
-  const stage = resolve(root, ".vite-github-actions-stage");
-  if (
-    !inside(root, stage) ||
-    stage === destination ||
-    inside(destination, stage) ||
-    inside(stage, destination)
-  )
-    throw new Error("Unsafe distribution stage");
-  assertNoSymlinks(stage, root);
-  rmSync(stage, { recursive: true, force: true });
-  mkdirSync(stage, { recursive: true });
-  try {
-    const records = discoverMetadata(root, options);
-    const sourceNames = records.map((record) => record.name);
-    for (const { name, file: metaFile, yaml } of records) {
-      const sourceDir = dirname(metaFile);
-      const outputDir = join(stage, name);
-      mkdirSync(outputDir, { recursive: true });
-      if (options.copyMetadata !== false)
-        copySafe(sourceDir, outputDir, metadata, stage);
-      else
-        copySafe(
-          metaFile,
-          join(outputDir, metaFile.slice(sourceDir.length + 1)),
-          metadata,
-          stage,
-        );
-      const isNode = /^\s*using:\s*node(?:20|24)\s*$/m.test(yaml);
-      const isComposite = /^\s*using:\s*composite\s*$/m.test(yaml);
-      if (!isNode && !isComposite)
-        throw new Error("Unsupported action runtime: " + name);
-      if (names.includes(name)) {
-        const bundleName = options.sharedChunks
-          ? join(name, "index.mjs")
-          : name + ".mjs";
-        const src = join(bundles, bundleName);
-        const main = isNode
-          ? yaml.match(/^\s*main:\s*["']?([^\s"'#]+)["']?\s*$/m)?.[1]
-          : undefined;
-        const target = main ?? "index.mjs";
-        copySafe(
-          src,
-          safePath(outputDir, target, "Action entry"),
-          bundles,
-          stage,
-        );
-      } else if (isNode) {
-        const main = yaml.match(/^\s*main:\s*["']?([^\s"'#]+)["']?\s*$/m)?.[1];
-        if (!main || !autoFiles(root, options, name, yaml)[main])
-          throw new Error("Missing Node runtime mapping: " + name);
-      }
-      for (const [target, source] of Object.entries({
-        ...autoFiles(root, options, name, yaml),
-      })) {
-        const from = safePath(root, source, "Runtime file");
-        const destinationFile = safePath(outputDir, target, "Runtime target");
-        if (
-          from.endsWith(".ts") ||
-          from.endsWith(".mts") ||
-          from.endsWith(".cts") ||
-          from.endsWith(".tsx")
-        ) {
-          if (!/\.(?:mjs|cjs|js)$/.test(target))
-            throw new Error(
-              "TypeScript runtime target must be a JavaScript file: " + target,
-            );
-          assertNoSymlinks(from, root);
-          assertNoSymlinks(destinationFile, stage);
-          const result = transpileModule(readFileSync(from, "utf8"), {
-            fileName: from,
-            compilerOptions: {
-              module: target.endsWith(".cjs")
-                ? ModuleKind.CommonJS
-                : ModuleKind.ESNext,
-              target: ScriptTarget.ES2022,
-            },
-            reportDiagnostics: true,
-          });
-          const errors = (result.diagnostics ?? []).filter(
-            (d) => d.category === DiagnosticCategory.Error,
-          );
-          if (errors.length)
-            throw new Error(
-              "TypeScript runtime transpilation failed: " +
-                source +
-                ": " +
-                errors
-                  .map((d) => flattenDiagnosticMessageText(d.messageText, "\n"))
-                  .join("; "),
-            );
-          mkdirSync(dirname(destinationFile), { recursive: true });
-          writeFileSync(destinationFile, result.outputText);
-        } else {
-          copySafe(from, destinationFile, root, stage);
-        }
-      }
-      if (isNode) {
-        const main = yaml.match(/^\s*main:\s*["']?([^\s"'#]+)["']?\s*$/m)?.[1];
-        if (!main || !existsSync(safePath(outputDir, main, "Action main")))
-          throw new Error("Missing built Node action entry: " + name);
-      }
-      for (const match of yaml.matchAll(
-        /\$GITHUB_ACTION_PATH\/([\w.\x2f-]+)/g,
-      )) {
-        if (!existsSync(safePath(outputDir, match[1], "Composite runtime")))
-          throw new Error(
-            "Missing composite action runtime: " + name + "/" + match[1],
-          );
-      }
+
+function mappingFiles(root: string, mappings: FileMapping[]): ResolvedFile[] {
+  const results: ResolvedFile[] = [];
+  for (const mapping of mappings) {
+    const prefix = safe(root, globBase(mapping.from));
+    const names = globSync(mapping.from, { cwd: root, nodir: true }).sort();
+    if (!names.length) throw new Error("No files match: " + mapping.from);
+    for (const file of names) {
+      const source = safe(root, file);
+      if (!statSync(source).isFile()) continue;
+      const name = basename(source, extname(source));
+      const parent = basename(dirname(source));
+      const remainder = relative(prefix, source).split(sep).join("/");
+      const destinationTemplate = mapping.to
+        .replaceAll("{name}", name)
+        .replaceAll("{parent}", parent)
+        .replaceAll("{relative}", remainder);
+      const destination = destinationTemplate.includes("{") && destinationTemplate.includes("}")
+        ? (() => { throw new Error("Unknown destination placeholder: " + destinationTemplate); })()
+        : safe(root, mapping.to.endsWith("/") || !extname(destinationTemplate)
+          ? join(destinationTemplate, remainder)
+          : destinationTemplate);
+      results.push({ source, destination });
     }
-    for (const name of names) {
-      if (!sourceNames.includes(name))
-        throw new Error("Entry has no action metadata: " + name);
-    }
-    if (options.sharedChunks && existsSync(join(bundles, "_assets")))
-      copySafe(
-        join(bundles, "_assets"),
-        join(stage, "_assets"),
-        bundles,
-        stage,
-      );
-    rmSync(destination, { recursive: true, force: true });
-    renameSync(stage, destination);
-  } catch (error) {
-    rmSync(stage, { recursive: true, force: true });
-    throw error;
+  }
+  return results;
+}
+
+function assertDistinct(files: ResolvedFile[]): void {
+  const seen = new Set<string>();
+  for (const file of files) {
+    if (seen.has(file.destination)) throw new Error("Duplicate destination: " + file.destination);
+    seen.add(file.destination);
   }
 }
+
 export function githubActions(options: GithubActionsOptions = {}): Plugin {
   const root = resolve(process.cwd(), options.projectRoot ?? ".");
-  const output = resolve(
-    root,
-    options.outputDir ?? (options.repositoryAction ? "dist" : "actions/dist"),
-  );
-  let names: string[] = [];
+  const staging = safe(root, ".vite-github-actions-build");
+  let built: ResolvedFile[] = [];
+  let copied: ResolvedFile[] = [];
+  let outputNames: Record<string, string> = {};
   return {
     name: "vite-github-actions",
     apply: "build",
     config() {
-      if (options.repositoryAction) {
-        const {
-          entry,
-          metadataFile = "action.yml",
-          main = "dist/index.mjs",
-        } = options.repositoryAction;
-        const source = safePath(root, entry, "Repository action entry");
-        if (!existsSync(source))
-          throw new Error("Repository action entry not found: " + source);
-        const metadataPath = resolve(root, metadataFile);
-        if (!existsSync(metadataPath))
-          throw new Error("Marketplace action requires root " + metadataFile);
-        const yaml = readFileSync(metadataPath, "utf8");
-        if (!/^\s*using:\s*node(?:20|24)\s*$/m.test(yaml))
-          throw new Error(
-            "repositoryAction requires a Node.js action metadata runtime",
-          );
-        const declared = yaml.match(
-          /^\s*main:\s*["']?([^\s"'#]+)["']?\s*$/m,
-        )?.[1];
-        if (!declared || declared !== main)
-          throw new Error(
-            `Root ${metadataFile} runs.main must reference ${main}`,
-          );
-        const dest = safePath(root, main, "Marketplace bundle output");
-        const dir = dirname(dest);
-        if (dir === root)
-          throw new Error(
-            "Marketplace bundle must be in a dedicated output directory",
-          );
-        if (options.outputDir && resolve(root, options.outputDir) !== dir)
-          throw new Error(
-            "outputDir must match the directory of repositoryAction.main",
-          );
-        return {
-          ssr: {
-            noExternal: options.bundleDependencies === false ? undefined : true,
-          },
-          build: {
-            ssr: true,
-            target: options.target ?? "node24",
-            outDir: dir,
-            emptyOutDir: true,
-            minify: false,
-            rollupOptions: {
-              input: { action: source },
-              output: { entryFileNames: win32.basename(dest) },
-            },
-          },
-        };
-      }
-      const entries = discoverMetadataEntries(root, options);
-      names = Object.keys(entries);
-      if (!names.length) throw new Error("No action entries configured");
-      if (
-        (options.outputDir ?? "actions/dist") ===
-        (options.distributionDir ?? "actions")
-      )
-        throw new Error(
-          "Bundle output and distribution cannot be the same directory",
-        );
+      built = mappingFiles(root, options.builds ?? []);
+      copied = mappingFiles(root, options.copies ?? []);
+      assertDistinct([...built, ...copied]);
+      if (!built.length && !copied.length) throw new Error("Provide builds or copies");
+      outputNames = Object.fromEntries(built.map((entry, index) => [String(index), entry.source]));
+      if (!built.length) return { build: { write: false, rollupOptions: { input: {} } } };
       return {
-        ssr: {
-          noExternal: options.bundleDependencies === false ? undefined : true,
-        },
+        ssr: { noExternal: options.bundleDependencies === false ? undefined : true },
         build: {
           ssr: true,
           target: options.target ?? "node24",
-          outDir: output,
+          outDir: staging,
           emptyOutDir: true,
           minify: false,
           rollupOptions: {
-            input: entries,
-            output: options.sharedChunks
-              ? {
-                  entryFileNames: "[name]/index.mjs",
-                  chunkFileNames: "_assets/[name]-[hash].mjs",
-                  assetFileNames: "_assets/[name]-[hash][extname]",
-                }
-              : { entryFileNames: "[name].mjs" },
+            input: outputNames,
+            output: {
+              entryFileNames: "[name].mjs",
+              chunkFileNames: "_chunks/[name]-[hash].mjs",
+              assetFileNames: "_assets/[name]-[hash][extname]",
+            },
           },
         },
       };
     },
     closeBundle() {
-      if (!options.repositoryAction)
-        generateActionDistributions(options, names, root);
+      for (const file of copied) {
+        if (file.source === file.destination) continue;
+        mkdirSync(dirname(file.destination), { recursive: true });
+        cpSync(file.source, file.destination);
+      }
+      for (const [index, file] of built.entries()) {
+        const from = join(staging, index + ".mjs");
+        if (!existsSync(from)) throw new Error("Missing built entry: " + from);
+        mkdirSync(dirname(file.destination), { recursive: true });
+        cpSync(from, file.destination);
+      }
+      if (built.length) {
+        // Chunked output needs to remain adjacent to the entry files. Each entry
+        // is bundled independently in a follow-up if cross-directory chunks exist.
+        rmSync(staging, { recursive: true, force: true });
+      }
     },
   };
 }
