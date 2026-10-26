@@ -123,8 +123,11 @@ function discoverMetadataEntries(
         "{name}/{name}.ts",
       ]
     ).map((pattern) => pattern.replaceAll("{name}", name));
+    const candidateRoot = options.sourceDirs?.[name]
+      ? safePath(root, options.sourceDirs[name], "Action source")
+      : sourceRoot;
     const entry = candidates
-      .map((p) => safePath(sourceRoot, p, "Action entry"))
+      .map((p) => safePath(candidateRoot, p, "Action entry"))
       .find(existsSync);
     if (!entry)
       throw new Error(
