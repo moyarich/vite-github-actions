@@ -32,7 +32,7 @@ export interface RepositoryActionOptions {
   /** JavaScript or TypeScript entrypoint, relative to repository root. */
   entry: string;
   /** Root metadata path, action.yml or action.yaml (default: action.yml). */
-  metadataFile?: "action.yml" | "action.yaml";
+  metadataFile?: string;
   /** Compiled entry relative to repository root (default: dist/index.mjs). */
   main?: string;
 }
@@ -48,7 +48,9 @@ export interface GithubActionsOptions {
   target?: string;
   bundleDependencies?: boolean;
   validateMetadata?: boolean;
-  /** Source metadata directories; defaults to actionsDir. */
+  /** Configurable metadata filename inside each action directory. */
+  metadataFile?: string;
+  /** Source metadata directories. */
   metadataDir?: string;
   /** Public action directory. When generation is enabled defaults to actionsDir. */
   distributionDir?: string;
@@ -112,7 +114,7 @@ function discoverMetadataEntries(
   const result: Record<string, string> = {};
   for (const item of readdirSync(metadataDir, { withFileTypes: true })) {
     if (!item.isDirectory()) continue;
-    const yamlPath = join(metadataDir, item.name, "action.yml");
+    const yamlPath = join(metadataDir, item.name, options.metadataFile ?? "action.yml");
     if (!existsSync(yamlPath)) continue;
     const yaml = readFileSync(yamlPath, "utf8");
     if (!yaml.includes("using: node24") && !yaml.includes("using: node20"))
@@ -127,10 +129,10 @@ function discoverMetadataEntries(
       ]
     ).map((name) => name.replaceAll("{name}", item.name));
     const entry = candidates.find((file) =>
-      existsSync(join(sourceDir, item.name, file)),
+      inside(root, resolve(sourceDir, file)) && existsSync(resolve(sourceDir, file)),
     );
     if (!entry) throw new Error("Missing Node action entry: " + item.name);
-    result[item.name] = join(sourceDir, item.name, entry);
+    result[item.name] = resolve(sourceDir, entry);
   }
   return result;
 }
@@ -235,13 +237,13 @@ export function generateActionDistributions(
         throw new Error("Invalid action directory: " + name);
       const sourceDir = join(metadata, name);
       const outputDir = join(stage, name);
-      const metaFile = join(sourceDir, "action.yml");
-      if (!existsSync(metaFile)) throw new Error("Missing action.yml: " + name);
+      const metaFile = join(sourceDir, options.metadataFile ?? "action.yml");
+      if (!existsSync(metaFile)) throw new Error("Missing action metadata: " + name);
       const yaml = readFileSync(metaFile, "utf8");
       mkdirSync(outputDir, { recursive: true });
       if (options.copyMetadata !== false)
         copySafe(sourceDir, outputDir, metadata, stage);
-      else copySafe(metaFile, join(outputDir, "action.yml"), metadata, stage);
+      else copySafe(metaFile, join(outputDir, options.metadataFile ?? "action.yml"), metadata, stage);
       const isNode = /^\s*using:\s*node(?:20|24)\s*$/m.test(yaml);
       const isComposite = /^\s*using:\s*composite\s*$/m.test(yaml);
       if (!isNode && !isComposite)
