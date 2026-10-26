@@ -114,7 +114,11 @@ function discoverMetadataEntries(
   const result: Record<string, string> = {};
   for (const item of readdirSync(metadataDir, { withFileTypes: true })) {
     if (!item.isDirectory()) continue;
-    const yamlPath = join(metadataDir, item.name, options.metadataFile ?? "action.yml");
+    const yamlPath = join(
+      metadataDir,
+      item.name,
+      options.metadataFile ?? "action.yml",
+    );
     if (!existsSync(yamlPath)) continue;
     const yaml = readFileSync(yamlPath, "utf8");
     if (!yaml.includes("using: node24") && !yaml.includes("using: node20"))
@@ -128,8 +132,10 @@ function discoverMetadataEntries(
         "{name}-cli.ts",
       ]
     ).map((name) => name.replaceAll("{name}", item.name));
-    const entry = candidates.find((file) =>
-      inside(root, resolve(sourceDir, file)) && existsSync(resolve(sourceDir, file)),
+    const entry = candidates.find(
+      (file) =>
+        inside(root, resolve(sourceDir, file)) &&
+        existsSync(resolve(sourceDir, file)),
     );
     if (!entry) throw new Error("Missing Node action entry: " + item.name);
     result[item.name] = resolve(sourceDir, entry);
@@ -238,12 +244,19 @@ export function generateActionDistributions(
       const sourceDir = join(metadata, name);
       const outputDir = join(stage, name);
       const metaFile = join(sourceDir, options.metadataFile ?? "action.yml");
-      if (!existsSync(metaFile)) throw new Error("Missing action metadata: " + name);
+      if (!existsSync(metaFile))
+        throw new Error("Missing action metadata: " + name);
       const yaml = readFileSync(metaFile, "utf8");
       mkdirSync(outputDir, { recursive: true });
       if (options.copyMetadata !== false)
         copySafe(sourceDir, outputDir, metadata, stage);
-      else copySafe(metaFile, join(outputDir, options.metadataFile ?? "action.yml"), metadata, stage);
+      else
+        copySafe(
+          metaFile,
+          join(outputDir, options.metadataFile ?? "action.yml"),
+          metadata,
+          stage,
+        );
       const isNode = /^\s*using:\s*node(?:20|24)\s*$/m.test(yaml);
       const isComposite = /^\s*using:\s*composite\s*$/m.test(yaml);
       if (!isNode && !isComposite)
