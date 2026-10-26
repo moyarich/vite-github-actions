@@ -72,6 +72,8 @@ export interface GithubActionsOptions {
   includeDiscovered?: boolean;
   /** Discover Node action entries from authored action.yml directories. */
   discoverFromMetadata?: boolean;
+  /** Additional colocated asset patterns, e.g. **/*.json. */
+  assets?: string[];
 }
 function inside(base: string, target: string): boolean {
   const rel = relative(base, target);
@@ -130,6 +132,35 @@ function discoverMetadataEntries(root: string, options: GithubActionsOptions): R
     const entry = candidates.find(file => existsSync(join(sourceDir, item.name, file)));
     if (!entry) throw new Error('Missing Node action entry: ' + item.name);
     result[item.name] = join(sourceDir, item.name, entry);
+  }
+  return result;
+}
+function collectedFiles(dir: string, base = dir): string[] {
+  if (!existsSync(dir)) return [];
+  return readdirSync(dir, { withFileTypes: true }).flatMap(item => {
+    const full = join(dir, item.name);
+    if (item.isSymbolicLink()) throw new Error('Refusing symlink: ' + full);
+    return item.isDirectory() ? collectedFiles(full, base) : item.isFile() ? [relative(base, full).split(sep).join('/')] : [];
+  });
+}
+function assetMatch(pattern: string, file: string): boolean {
+  if (pattern.startsWith('**/')) return assetMatch(pattern.slice(3), file) || file.split('/').some((_, i, parts) => assetMatch(pattern.slice(3), parts.slice(i).join('/')));
+  if (pattern.startsWith('*.')) return !file.includes('/') && file.endsWith(pattern.slice(1));
+  return pattern === file;
+}
+function autoFiles(root: string, options: GithubActionsOptions, name: string, yaml: string): Record<string, string> {
+  const dir = resolve(root, options.sourcesDir ?? 'src/actions', name);
+  const available = collectedFiles(dir);
+  const result: Record<string, string> = {};
+  for (const match of yaml.matchAll(/\$GITHUB_ACTION_PATH\/([\w./-]+)/g)) {
+    const target = match[1];
+    const candidates = [target, target.replace(/\.(mjs|js|cjs)$/, '.ts')];
+    const source = candidates.find(file => available.includes(file));
+    if (source) result[target] = relative(root, join(dir, source)).split(sep).join('/');
+  }
+  for (const file of available) {
+    if ((options.assets ?? []).some(pattern => assetMatch(pattern, file)))
+      result[file] ??= relative(root, join(dir, file)).split(sep).join('/');
   }
   return result;
 }
@@ -241,11 +272,14 @@ export function generateActionDistributions(
         );
       } else if (isNode) {
         const main = yaml.match(/^\s*main:\s*["']?([^\s"'#]+)["']?\s*$/m)?.[1];
-        if (!main || !options.runtimeFiles?.[name]?.[main])
+        if (!main || !(options.runtimeFiles?.[name]?.[main] ?? (options.discoverFromMetadata ? autoFiles(root, options, name, yaml)[main] : undefined)))
           throw new Error("Missing Node runtime mapping: " + name);
       }
       for (const [target, source] of Object.entries(
-        options.runtimeFiles?.[name] ?? {},
+        {
+          ...(options.discoverFromMetadata ? autoFiles(root, options, name, yaml) : {}),
+          ...(options.runtimeFiles?.[name] ?? {}),
+        },
       )) {
         const from = safePath(root, source, "Runtime file");
         const destinationFile = safePath(outputDir, target, "Runtime target");
