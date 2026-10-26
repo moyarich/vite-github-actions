@@ -58,7 +58,7 @@ export interface GithubActionsOptions {
   sharedChunks?: boolean;
   /** Per-action source filename discovery candidates (default index.ts, <name>-cli.ts). */
   entryNames?: string[];
-  /** Additional colocated asset patterns, e.g. **/*.json. */
+  /** Glob patterns for colocated assets, including nested JSON files. */
   assets?: string[];
 }
 function inside(base: string, target: string): boolean {
