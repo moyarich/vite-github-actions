@@ -68,7 +68,7 @@ function mappingFiles(root: string, mappings: FileMapping[]): ResolvedFile[] {
   const results: ResolvedFile[] = [];
   for (const mapping of mappings) {
     const prefix = safe(root, globBase(mapping.from));
-    const names = globSync(mapping.from, { cwd: root, nodir: true }).sort();
+    const names = globSync(mapping.from, { cwd: root }).sort();
     if (!names.length) throw new Error("No files match: " + mapping.from);
     for (const file of names) {
       const source = safe(root, file);
@@ -141,7 +141,11 @@ export function githubActions(options: GithubActionsOptions = {}): Plugin {
           rollupOptions: {
             input: outputNames,
             output: {
-              entryFileNames: "[name].mjs",
+              entryFileNames: (chunk: { name: string }) => {
+                const item = built[Number(chunk.name)];
+                if (!item) throw new Error("Unknown build entry: " + chunk.name);
+                return relative(root, item.destination).split(sep).join("/");
+              },
               chunkFileNames: "_chunks/[name]-[hash].mjs",
               assetFileNames: "_assets/[name]-[hash][extname]",
             },
@@ -155,16 +159,24 @@ export function githubActions(options: GithubActionsOptions = {}): Plugin {
         mkdirSync(dirname(file.destination), { recursive: true });
         cpSync(file.source, file.destination);
       }
-      for (const [index, file] of built.entries()) {
-        const from = join(staging, index + ".mjs");
-        if (!existsSync(from)) throw new Error("Missing built entry: " + from);
-        mkdirSync(dirname(file.destination), { recursive: true });
-        cpSync(from, file.destination);
-      }
       if (built.length) {
-        // Chunked output needs to remain adjacent to the entry files. Each entry
-        // is bundled independently in a follow-up if cross-directory chunks exist.
-        rmSync(staging, { recursive: true, force: true });
+        const copyBuildTree = (directory: string): void => {
+          for (const item of readdirSync(directory, { withFileTypes: true })) {
+            const source = join(directory, item.name);
+            if (item.isSymbolicLink()) throw new Error("Symlink in generated files: " + source);
+            if (item.isDirectory()) copyBuildTree(source);
+            else if (item.isFile()) {
+              const destination = safe(root, relative(staging, source));
+              mkdirSync(dirname(destination), { recursive: true });
+              cpSync(source, destination);
+            }
+          }
+        };
+        try {
+          copyBuildTree(staging);
+        } finally {
+          rmSync(staging, { recursive: true, force: true });
+        }
       }
     },
   };
