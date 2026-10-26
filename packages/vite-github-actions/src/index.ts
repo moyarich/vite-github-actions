@@ -409,7 +409,6 @@ export function githubActions(options: GithubActionsOptions = {}): Plugin {
       names = Object.keys(entries);
       if (!names.length) throw new Error("No action entries configured");
       if (
-        true &&
         (options.outputDir ?? "actions/dist") ===
           (options.distributionDir ?? "actions")
       )
