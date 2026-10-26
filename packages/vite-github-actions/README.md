@@ -12,12 +12,14 @@ export default defineConfig({
   plugins: [
     githubActions({
       root: "../..",
-      build: { input: [
-        {
-          from: "packages/cli/src/*/action-entry.ts",
-          to: "actions/{parent}/index.mjs",
-        },
-      ] },
+      build: {
+        input: [
+          {
+            from: "packages/cli/src/*/action-entry.ts",
+            to: "actions/{parent}/index.mjs",
+          },
+        ],
+      },
       copy: [
         { from: "packages/actions/actions/**/*", to: "actions/" },
         { from: "packages/cli/src/**/*.json", to: "actions/" },

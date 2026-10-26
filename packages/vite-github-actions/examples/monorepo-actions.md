@@ -29,12 +29,14 @@ export default defineConfig({
   plugins: [
     githubActions({
       root: "../..",
-      build: { input: [
-        {
-          from: "packages/cli/src/*/action-entry.ts",
-          to: "actions/{parent}/index.mjs",
-        },
-      ] },
+      build: {
+        input: [
+          {
+            from: "packages/cli/src/*/action-entry.ts",
+            to: "actions/{parent}/index.mjs",
+          },
+        ],
+      },
       copy: [
         { from: "packages/actions/actions/**/*", to: "actions/" },
         { from: "packages/cli/src/schemas/**/*.json", to: "actions/schemas/" },
@@ -51,12 +53,14 @@ This illustrates one consumer's layout, **not required naming conventions**. Add
 ```ts
 githubActions({
   root: ".",
-  build: { input: [
-    {
-      from: "implementation/**/runner.ts",
-      to: "artifacts/{parent}/runner.mjs",
-    },
-  ] },
+  build: {
+    input: [
+      {
+        from: "implementation/**/runner.ts",
+        to: "artifacts/{parent}/runner.mjs",
+      },
+    ],
+  },
   copy: [{ from: "definitions/**/*", to: "artifacts/definitions/" }],
 });
 ```

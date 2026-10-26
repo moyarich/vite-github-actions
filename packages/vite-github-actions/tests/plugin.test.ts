@@ -37,12 +37,14 @@ describe("generic Vite builds and copies", () => {
         plugins: [
           githubActions({
             root: root,
-            build: { input: [
-              {
-                from: "packages/implementation/*.ts",
-                to: "generated/{name}.mjs",
-              },
-            ] },
+            build: {
+              input: [
+                {
+                  from: "packages/implementation/*.ts",
+                  to: "generated/{name}.mjs",
+                },
+              ],
+            },
           }),
         ],
       });
