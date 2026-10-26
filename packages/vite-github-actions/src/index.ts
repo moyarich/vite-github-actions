@@ -177,7 +177,7 @@ export function githubActions(options: GithubActionsOptions = {}): Plugin {
         },
       };
     },
-    closeBundle() {
+    writeBundle() {
       for (const file of copied) {
         if (file.source === file.destination) continue;
         mkdirSync(dirname(file.destination), { recursive: true });
