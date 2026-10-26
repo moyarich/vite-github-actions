@@ -1,81 +1,70 @@
 import { describe, expect, it } from "vitest";
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { build } from "vite";
 import { githubActions } from "../src/index";
 
-describe("vite-github-actions", () => {
-  it("discovers Node entries from action metadata", () => {
-    const root = mkdtempSync(join(tmpdir(), "vite-actions-"));
+function fixture(run: (root: string, write: (path: string, value: string) => void) => Promise<void>) {
+  const root = mkdtempSync(join(tmpdir(), "vite-actions-"));
+  const write = (path: string, value: string) => {
+    const file = join(root, path);
+    mkdirSync(join(file, ".."), { recursive: true });
+    writeFileSync(file, value);
+  };
+  return run(root, write).finally(() => rmSync(root, { recursive: true, force: true }));
+}
+
+describe("generic Vite builds and copies", () => {
+  it("builds arbitrary entry filenames to requested paths", async () => {
+    await fixture(async (root, write) => {
+      write("packages/implementation/custom-start.ts", "console.log('built');");
+      await build({
+        configFile: false,
+        plugins: [githubActions({
+          projectRoot: root,
+          builds: [{ from: "packages/implementation/*.ts", to: "generated/{name}.mjs" }],
+        })],
+      });
+      expect(readFileSync(join(root, "generated/custom-start.mjs"), "utf8")).toContain("built");
+    });
+  });
+
+  it("copies files without inspecting metadata names or contents", async () => {
+    await fixture(async (root, write) => {
+      write("definitions/tool/anything.yaml", "arbitrary: metadata");
+      write("definitions/tool/README.md", "Documentation");
+      await build({
+        configFile: false,
+        plugins: [githubActions({
+          projectRoot: root,
+          copies: [{ from: "definitions/**/*", to: "generated/" }],
+        })],
+      });
+      expect(readFileSync(join(root, "generated/tool/anything.yaml"), "utf8")).toBe("arbitrary: metadata");
+      expect(readFileSync(join(root, "generated/tool/README.md"), "utf8")).toBe("Documentation");
+    });
+  });
+
+  it("rejects overlapping destination mappings", () => {
+    const root = mkdtempSync(join(tmpdir(), "vite-collision-"));
     try {
-      mkdirSync(join(root, "metadata/example"), { recursive: true });
-      mkdirSync(join(root, "src/example"), { recursive: true });
-      writeFileSync(
-        join(root, "metadata/example/action.yml"),
-        "name: Example\nruns:\n  using: node24\n  main: index.mjs\n",
-      );
-      writeFileSync(join(root, "src/example/index.ts"), "export {};");
+      mkdirSync(join(root, "one"), { recursive: true });
+      mkdirSync(join(root, "two"), { recursive: true });
+      writeFileSync(join(root, "one/input.json"), "{}");
+      writeFileSync(join(root, "two/input.json"), "{}");
       const plugin = githubActions({
         projectRoot: root,
-        metadataDir: "metadata",
-        sourcesDir: "src",
-        distributionDir: "actions",
+        copies: [
+          { from: "one/*.json", to: "out/input.json" },
+          { from: "two/*.json", to: "out/input.json" },
+        ],
       });
-      expect(plugin.name).toBe("vite-github-actions");
       const config = plugin.config;
-      if (typeof config !== "function")
-        throw new Error("Expected Vite config function");
-      const result = config.call({} as never, {} as never, {
-        command: "build",
-        mode: "production",
-      }) as {
-        build: { rollupOptions: { input: Record<string, string> } };
-      };
-      expect(result.build.rollupOptions.input.example).toBe(
-        join(root, "src/example/index.ts"),
-      );
+      if (typeof config !== "function") throw new Error("Missing config hook");
+      expect(() => config.call({} as never, {} as never, { command: "build", mode: "production" })).toThrow(/Duplicate destination/);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
-  });
-  it("supports custom metadata and unrelated source directory names", () => {
-    const root = mkdtempSync(join(tmpdir(), "vite-generic-"));
-    try {
-      mkdirSync(join(root, "definitions/custom"), { recursive: true });
-      mkdirSync(join(root, "implementations/unrelated"), { recursive: true });
-      writeFileSync(
-        join(root, "definitions/custom/metadata.yaml"),
-        "runs:\n  using: node24\n  main: index.mjs\n",
-      );
-      writeFileSync(
-        join(root, "implementations/unrelated/start.ts"),
-        "export {};",
-      );
-      const plugin = githubActions({
-        projectRoot: root,
-        metadataDir: "definitions",
-        metadataPatterns: ["**/metadata.yaml"],
-        sourcesDir: "implementations",
-        entryNames: ["start.ts"],
-        sourceDirs: { custom: "implementations/unrelated" },
-        distributionDir: "dist-actions",
-      });
-      const config = plugin.config;
-      if (typeof config !== "function") throw new Error("Expected config");
-      const result = config.call({} as never, {} as never, {
-        command: "build",
-        mode: "production",
-      }) as {
-        build: { rollupOptions: { input: Record<string, string> } };
-      };
-      expect(result.build.rollupOptions.input.custom).toBe(
-        join(root, "implementations/unrelated/start.ts"),
-      );
-    } finally {
-      rmSync(root, { recursive: true, force: true });
-    }
-  });
-  it("provides a Vite plugin", () => {
-    expect(githubActions().name).toBe("vite-github-actions");
   });
 });
