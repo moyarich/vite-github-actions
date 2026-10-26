@@ -103,50 +103,82 @@ function copySafe(
     },
   });
 }
-function discoverMetadataEntries(root: string, options: GithubActionsOptions): Record<string, string> {
-  const metadataDir = resolve(root, options.metadataDir ?? 'actions');
-  const sourceDir = resolve(root, options.sourcesDir ?? 'src/actions');
+function discoverMetadataEntries(
+  root: string,
+  options: GithubActionsOptions,
+): Record<string, string> {
+  const metadataDir = resolve(root, options.metadataDir ?? "actions");
+  const sourceDir = resolve(root, options.sourcesDir ?? "src/actions");
   const result: Record<string, string> = {};
   for (const item of readdirSync(metadataDir, { withFileTypes: true })) {
     if (!item.isDirectory()) continue;
-    const yamlPath = join(metadataDir, item.name, 'action.yml');
+    const yamlPath = join(metadataDir, item.name, "action.yml");
     if (!existsSync(yamlPath)) continue;
-    const yaml = readFileSync(yamlPath, 'utf8');
-    if (!yaml.includes('using: node24') && !yaml.includes('using: node20')) continue;
-    const candidates = (options.entryNames ?? ['action-entry.ts', 'entry.ts', 'index.ts', '{name}.ts', '{name}-cli.ts'])
-      .map(name => name.replaceAll('{name}', item.name));
-    const entry = candidates.find(file => existsSync(join(sourceDir, item.name, file)));
-    if (!entry) throw new Error('Missing Node action entry: ' + item.name);
+    const yaml = readFileSync(yamlPath, "utf8");
+    if (!yaml.includes("using: node24") && !yaml.includes("using: node20"))
+      continue;
+    const candidates = (
+      options.entryNames ?? [
+        "action-entry.ts",
+        "entry.ts",
+        "index.ts",
+        "{name}.ts",
+        "{name}-cli.ts",
+      ]
+    ).map((name) => name.replaceAll("{name}", item.name));
+    const entry = candidates.find((file) =>
+      existsSync(join(sourceDir, item.name, file)),
+    );
+    if (!entry) throw new Error("Missing Node action entry: " + item.name);
     result[item.name] = join(sourceDir, item.name, entry);
   }
   return result;
 }
 function collectedFiles(dir: string, base = dir): string[] {
   if (!existsSync(dir)) return [];
-  return readdirSync(dir, { withFileTypes: true }).flatMap(item => {
+  return readdirSync(dir, { withFileTypes: true }).flatMap((item) => {
     const full = join(dir, item.name);
-    if (item.isSymbolicLink()) throw new Error('Refusing symlink: ' + full);
-    return item.isDirectory() ? collectedFiles(full, base) : item.isFile() ? [relative(base, full).split(sep).join('/')] : [];
+    if (item.isSymbolicLink()) throw new Error("Refusing symlink: " + full);
+    return item.isDirectory()
+      ? collectedFiles(full, base)
+      : item.isFile()
+        ? [relative(base, full).split(sep).join("/")]
+        : [];
   });
 }
 function assetMatch(pattern: string, file: string): boolean {
-  if (pattern.startsWith('**/')) return assetMatch(pattern.slice(3), file) || file.split('/').some((_, i, parts) => assetMatch(pattern.slice(3), parts.slice(i).join('/')));
-  if (pattern.startsWith('*.')) return !file.includes('/') && file.endsWith(pattern.slice(1));
+  if (pattern.startsWith("**/"))
+    return (
+      assetMatch(pattern.slice(3), file) ||
+      file
+        .split("/")
+        .some((_, i, parts) =>
+          assetMatch(pattern.slice(3), parts.slice(i).join("/")),
+        )
+    );
+  if (pattern.startsWith("*."))
+    return !file.includes("/") && file.endsWith(pattern.slice(1));
   return pattern === file;
 }
-function autoFiles(root: string, options: GithubActionsOptions, name: string, yaml: string): Record<string, string> {
-  const dir = resolve(root, options.sourcesDir ?? 'src/actions', name);
+function autoFiles(
+  root: string,
+  options: GithubActionsOptions,
+  name: string,
+  yaml: string,
+): Record<string, string> {
+  const dir = resolve(root, options.sourcesDir ?? "src/actions", name);
   const available = collectedFiles(dir);
   const result: Record<string, string> = {};
   for (const match of yaml.matchAll(/\$GITHUB_ACTION_PATH\/([\w./-]+)/g)) {
     const target = match[1];
-    const candidates = [target, target.replace(/\.(mjs|js|cjs)$/, '.ts')];
-    const source = candidates.find(file => available.includes(file));
-    if (source) result[target] = relative(root, join(dir, source)).split(sep).join('/');
+    const candidates = [target, target.replace(/\.(mjs|js|cjs)$/, ".ts")];
+    const source = candidates.find((file) => available.includes(file));
+    if (source)
+      result[target] = relative(root, join(dir, source)).split(sep).join("/");
   }
   for (const file of available) {
-    if ((options.assets ?? []).some(pattern => assetMatch(pattern, file)))
-      result[file] ??= relative(root, join(dir, file)).split(sep).join('/');
+    if ((options.assets ?? []).some((pattern) => assetMatch(pattern, file)))
+      result[file] ??= relative(root, join(dir, file)).split(sep).join("/");
   }
   return result;
 }
@@ -159,14 +191,8 @@ export function generateActionDistributions(
   names: string[],
   root = process.cwd(),
 ): void {
-  const metadata = resolve(
-    root,
-    options.metadataDir ?? "actions",
-  );
-  const destination = resolve(
-    root,
-    options.distributionDir ?? "actions",
-  );
+  const metadata = resolve(root, options.metadataDir ?? "actions");
+  const destination = resolve(root, options.distributionDir ?? "actions");
   const bundles = resolve(root, options.outputDir ?? "actions/dist");
   if (
     !inside(root, metadata) ||
@@ -237,14 +263,12 @@ export function generateActionDistributions(
         );
       } else if (isNode) {
         const main = yaml.match(/^\s*main:\s*["']?([^\s"'#]+)["']?\s*$/m)?.[1];
-        if (!main || !(autoFiles(root, options, name, yaml)[main]))
+        if (!main || !autoFiles(root, options, name, yaml)[main])
           throw new Error("Missing Node runtime mapping: " + name);
       }
-      for (const [target, source] of Object.entries(
-        {
-          ...autoFiles(root, options, name, yaml),
-        },
-      )) {
+      for (const [target, source] of Object.entries({
+        ...autoFiles(root, options, name, yaml),
+      })) {
         const from = safePath(root, source, "Runtime file");
         const destinationFile = safePath(outputDir, target, "Runtime target");
         if (

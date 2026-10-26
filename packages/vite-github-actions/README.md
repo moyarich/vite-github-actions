@@ -93,17 +93,19 @@ Use authored `action.yml` directories as the action list. Node actions are resol
 ```ts
 // vite.config.ts
 export default defineConfig({
-  plugins: [githubActions({
-    projectRoot: '../..',
-    sourcesDir: 'packages/cli/src',
-    metadataDir: 'packages/actions/actions',
-    outputDir: 'packages/actions/dist/.bundles',
-    distributionDir: 'actions',
-    generateDistributions: true,
-    sharedChunks: true,
-    discoverFromMetadata: true,
-    assets: ['**/*.json'],
-  })],
+  plugins: [
+    githubActions({
+      projectRoot: "../..",
+      sourcesDir: "packages/cli/src",
+      metadataDir: "packages/actions/actions",
+      outputDir: "packages/actions/dist/.bundles",
+      distributionDir: "actions",
+      generateDistributions: true,
+      sharedChunks: true,
+      discoverFromMetadata: true,
+      assets: ["**/*.json"],
+    }),
+  ],
 });
 ```
 
