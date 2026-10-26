@@ -194,7 +194,12 @@ function autoFiles(
   name: string,
   yaml: string,
 ): Record<string, string> {
-  const dir = safePath(root, options.sourceDirs?.[name] ?? join(options.sourcesDir ?? "src/actions", name), "Action source");
+  const dir = safePath(
+    root,
+    options.sourceDirs?.[name] ??
+      join(options.sourcesDir ?? "src/actions", name),
+    "Action source",
+  );
   const available = collectedFiles(dir);
   const result: Record<string, string> = {};
   for (const match of yaml.matchAll(/\$GITHUB_ACTION_PATH\/([\w./-]+)/g)) {
