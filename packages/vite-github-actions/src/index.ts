@@ -137,7 +137,15 @@ export function githubActions(options: GithubActionsOptions = {}): Plugin {
         built.map((entry, index) => [String(index), entry.source]),
       );
       if (!built.length)
-        return { build: { outDir: staging, emptyOutDir: true, rollupOptions: { input: { __copy_only__: "\\0vite-github-actions:copy-only" } } } };
+        return {
+          build: {
+            outDir: staging,
+            emptyOutDir: true,
+            rollupOptions: {
+              input: { __copy_only__: "\\0vite-github-actions:copy-only" },
+            },
+          },
+        };
       return {
         ssr: {
           noExternal: options.bundleDependencies === false ? undefined : true,
