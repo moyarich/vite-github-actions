@@ -105,33 +105,57 @@ function copySafe(
     },
   });
 }
-function discoverMetadataEntries(root: string, options: GithubActionsOptions): Record<string, string> {
-  const sourceRoot = resolve(root, options.sourcesDir ?? 'src/actions');
+function discoverMetadataEntries(
+  root: string,
+  options: GithubActionsOptions,
+): Record<string, string> {
+  const sourceRoot = resolve(root, options.sourcesDir ?? "src/actions");
   const entries: Record<string, string> = {};
   for (const { name, yaml } of discoverMetadata(root, options)) {
     if (!/^\s*using:\s*node(?:20|24)\s*$/m.test(yaml)) continue;
-    const candidates = (options.entryNames ?? [
-      '{name}/action-entry.ts', '{name}/entry.ts', '{name}/index.ts', '{name}/{name}.ts',
-    ]).map((pattern) => pattern.replaceAll('{name}', name));
-    const entry = candidates.map((p) => safePath(sourceRoot, p, 'Action entry')).find(existsSync);
-    if (!entry) throw new Error('Missing Node entry for ' + name + ': ' + candidates.join(', '));
+    const candidates = (
+      options.entryNames ?? [
+        "{name}/action-entry.ts",
+        "{name}/entry.ts",
+        "{name}/index.ts",
+        "{name}/{name}.ts",
+      ]
+    ).map((pattern) => pattern.replaceAll("{name}", name));
+    const entry = candidates
+      .map((p) => safePath(sourceRoot, p, "Action entry"))
+      .find(existsSync);
+    if (!entry)
+      throw new Error(
+        "Missing Node entry for " + name + ": " + candidates.join(", "),
+      );
     entries[name] = entry;
   }
   return entries;
 }
-function discoverMetadata(root: string, options: GithubActionsOptions): Array<{ name: string; file: string; yaml: string }> {
-  const directory = resolve(root, options.metadataDir ?? 'actions');
-  const patterns = options.metadataPatterns ?? ['**/*.yml', '**/*.yaml'];
-  const discovered = new Map<string, { name: string; file: string; yaml: string }>();
+function discoverMetadata(
+  root: string,
+  options: GithubActionsOptions,
+): Array<{ name: string; file: string; yaml: string }> {
+  const directory = resolve(root, options.metadataDir ?? "actions");
+  const patterns = options.metadataPatterns ?? ["**/*.yml", "**/*.yaml"];
+  const discovered = new Map<
+    string,
+    { name: string; file: string; yaml: string }
+  >();
   for (const pathname of collectedFiles(directory)) {
     if (!patterns.some((pattern) => assetMatch(pattern, pathname))) continue;
-    const file = safePath(directory, pathname, 'Metadata file');
-    const yaml = readFileSync(file, 'utf8');
+    const file = safePath(directory, pathname, "Metadata file");
+    const yaml = readFileSync(file, "utf8");
     if (!/^\s*using:\s*(?:node20|node24|composite)\s*$/m.test(yaml)) continue;
     const parent = dirname(pathname);
-    const name = parent === '.' ? pathname.replace(/\.[^.]+$/, '') : parent.split('/').join('-');
-    if (!/^[a-zA-Z][\w-]*$/.test(name)) throw new Error('Invalid action identity: ' + name);
-    if (discovered.has(name)) throw new Error('Ambiguous metadata for action: ' + name);
+    const name =
+      parent === "."
+        ? pathname.replace(/\.[^.]+$/, "")
+        : parent.split("/").join("-");
+    if (!/^[a-zA-Z][\w-]*$/.test(name))
+      throw new Error("Invalid action identity: " + name);
+    if (discovered.has(name))
+      throw new Error("Ambiguous metadata for action: " + name);
     discovered.set(name, { name, file, yaml });
   }
   return [...discovered.values()].sort((a, b) => a.name.localeCompare(b.name));
