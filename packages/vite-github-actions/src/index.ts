@@ -48,8 +48,8 @@ export interface GithubActionsOptions {
   target?: string;
   bundleDependencies?: boolean;
   validateMetadata?: boolean;
-  /** Configurable metadata filename inside each action directory. */
-  metadataFile?: string;
+  /** Glob patterns for action metadata, relative to metadataDir. */
+  metadataPatterns?: string[];
   /** Source metadata directories. */
   metadataDir?: string;
   /** Public action directory. When generation is enabled defaults to actionsDir. */
@@ -105,42 +105,36 @@ function copySafe(
     },
   });
 }
-function discoverMetadataEntries(
-  root: string,
-  options: GithubActionsOptions,
-): Record<string, string> {
-  const metadataDir = resolve(root, options.metadataDir ?? "actions");
-  const sourceDir = resolve(root, options.sourcesDir ?? "src/actions");
-  const result: Record<string, string> = {};
-  for (const item of readdirSync(metadataDir, { withFileTypes: true })) {
-    if (!item.isDirectory()) continue;
-    const yamlPath = join(
-      metadataDir,
-      item.name,
-      options.metadataFile ?? "action.yml",
-    );
-    if (!existsSync(yamlPath)) continue;
-    const yaml = readFileSync(yamlPath, "utf8");
-    if (!yaml.includes("using: node24") && !yaml.includes("using: node20"))
-      continue;
-    const candidates = (
-      options.entryNames ?? [
-        "{name}/action-entry.ts",
-        "{name}/entry.ts",
-        "{name}/index.ts",
-        "{name}/{name}.ts",
-        "{name}/{name}-cli.ts",
-      ]
-    ).map((name) => name.replaceAll("{name}", item.name));
-    const entry = candidates.find(
-      (file) =>
-        inside(root, resolve(sourceDir, file)) &&
-        existsSync(resolve(sourceDir, file)),
-    );
-    if (!entry) throw new Error("Missing Node action entry: " + item.name);
-    result[item.name] = resolve(sourceDir, entry);
+function discoverMetadataEntries(root: string, options: GithubActionsOptions): Record<string, string> {
+  const sourceRoot = resolve(root, options.sourcesDir ?? 'src/actions');
+  const entries: Record<string, string> = {};
+  for (const { name, yaml } of discoverMetadata(root, options)) {
+    if (!/^\s*using:\s*node(?:20|24)\s*$/m.test(yaml)) continue;
+    const candidates = (options.entryNames ?? [
+      '{name}/action-entry.ts', '{name}/entry.ts', '{name}/index.ts', '{name}/{name}.ts',
+    ]).map((pattern) => pattern.replaceAll('{name}', name));
+    const entry = candidates.map((p) => safePath(sourceRoot, p, 'Action entry')).find(existsSync);
+    if (!entry) throw new Error('Missing Node entry for ' + name + ': ' + candidates.join(', '));
+    entries[name] = entry;
   }
-  return result;
+  return entries;
+}
+function discoverMetadata(root: string, options: GithubActionsOptions): Array<{ name: string; file: string; yaml: string }> {
+  const directory = resolve(root, options.metadataDir ?? 'actions');
+  const patterns = options.metadataPatterns ?? ['**/*.yml', '**/*.yaml'];
+  const discovered = new Map<string, { name: string; file: string; yaml: string }>();
+  for (const pathname of collectedFiles(directory)) {
+    if (!patterns.some((pattern) => assetMatch(pattern, pathname))) continue;
+    const file = safePath(directory, pathname, 'Metadata file');
+    const yaml = readFileSync(file, 'utf8');
+    if (!/^\s*using:\s*(?:node20|node24|composite)\s*$/m.test(yaml)) continue;
+    const parent = dirname(pathname);
+    const name = parent === '.' ? pathname.replace(/\.[^.]+$/, '') : parent.split('/').join('-');
+    if (!/^[a-zA-Z][\w-]*$/.test(name)) throw new Error('Invalid action identity: ' + name);
+    if (discovered.has(name)) throw new Error('Ambiguous metadata for action: ' + name);
+    discovered.set(name, { name, file, yaml });
+  }
+  return [...discovered.values()].sort((a, b) => a.name.localeCompare(b.name));
 }
 function collectedFiles(dir: string, base = dir): string[] {
   if (!existsSync(dir)) return [];
@@ -234,26 +228,18 @@ export function generateActionDistributions(
   rmSync(stage, { recursive: true, force: true });
   mkdirSync(stage, { recursive: true });
   try {
-    const sourceNames = readdirSync(metadata, { withFileTypes: true })
-      .filter((item) => item.isDirectory())
-      .map((item) => item.name)
-      .sort();
-    for (const name of sourceNames) {
-      if (!/^[a-zA-Z][\w-]*$/.test(name))
-        throw new Error("Invalid action directory: " + name);
-      const sourceDir = join(metadata, name);
+    const records = discoverMetadata(root, options);
+    const sourceNames = records.map((record) => record.name);
+    for (const { name, file: metaFile, yaml } of records) {
+      const sourceDir = dirname(metaFile);
       const outputDir = join(stage, name);
-      const metaFile = join(sourceDir, options.metadataFile ?? "action.yml");
-      if (!existsSync(metaFile))
-        throw new Error("Missing action metadata: " + name);
-      const yaml = readFileSync(metaFile, "utf8");
       mkdirSync(outputDir, { recursive: true });
       if (options.copyMetadata !== false)
         copySafe(sourceDir, outputDir, metadata, stage);
       else
         copySafe(
           metaFile,
-          join(outputDir, options.metadataFile ?? "action.yml"),
+          join(outputDir, metaFile.slice(sourceDir.length + 1)),
           metadata,
           stage,
         );
