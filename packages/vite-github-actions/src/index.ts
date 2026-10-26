@@ -143,7 +143,8 @@ export function githubActions(options: GithubActionsOptions = {}): Plugin {
             output: {
               entryFileNames: (chunk: { name: string }) => {
                 const item = built[Number(chunk.name)];
-                if (!item) throw new Error("Unknown build entry: " + chunk.name);
+                if (!item)
+                  throw new Error("Unknown build entry: " + chunk.name);
                 return relative(root, item.destination).split(sep).join("/");
               },
               chunkFileNames: "_chunks/[name]-[hash].mjs",
@@ -163,7 +164,8 @@ export function githubActions(options: GithubActionsOptions = {}): Plugin {
         const copyBuildTree = (directory: string): void => {
           for (const item of readdirSync(directory, { withFileTypes: true })) {
             const source = join(directory, item.name);
-            if (item.isSymbolicLink()) throw new Error("Symlink in generated files: " + source);
+            if (item.isSymbolicLink())
+              throw new Error("Symlink in generated files: " + source);
             if (item.isDirectory()) copyBuildTree(source);
             else if (item.isFile()) {
               const destination = safe(root, relative(staging, source));
