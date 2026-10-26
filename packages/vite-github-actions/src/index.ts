@@ -144,11 +144,14 @@ export function githubActions(options: GithubActionsOptions = {}): Plugin {
       for (const file of built.slice(1)) {
         while (!within(distributionRoot, file.destination)) {
           const parent = dirname(distributionRoot);
-          if (parent === distributionRoot) throw new Error("No common output directory");
+          if (parent === distributionRoot)
+            throw new Error("No common output directory");
           distributionRoot = parent;
         }
       }
-      const sharedPrefix = relative(root, distributionRoot).split(sep).join("/");
+      const sharedPrefix = relative(root, distributionRoot)
+        .split(sep)
+        .join("/");
       const sharedFile = (folder: string, template: string) =>
         [sharedPrefix, folder, template].filter(Boolean).join("/");
       outputNames = Object.fromEntries(
