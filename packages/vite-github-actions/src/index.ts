@@ -58,8 +58,7 @@ function within(root: string, value: string): boolean {
 
 function safe(root: string, value: string): string {
   const full = resolve(root, value);
-  if (!within(root, full))
-    throw new Error("Path escapes root: " + value);
+  if (!within(root, full)) throw new Error("Path escapes root: " + value);
   return full;
 }
 
@@ -153,7 +152,8 @@ export function githubActions(options: GithubActionsOptions = {}): Plugin {
         };
       return {
         ssr: {
-          noExternal: options.build?.bundleDependencies === false ? undefined : true,
+          noExternal:
+            options.build?.bundleDependencies === false ? undefined : true,
         },
         build: {
           ssr: true,
