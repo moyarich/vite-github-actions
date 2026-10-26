@@ -36,8 +36,8 @@ describe("generic Vite builds and copies", () => {
         configFile: false,
         plugins: [
           githubActions({
-            projectRoot: root,
-            builds: [
+            root: root,
+            build: { input: [
               {
                 from: "packages/implementation/*.ts",
                 to: "generated/{name}.mjs",
@@ -60,8 +60,8 @@ describe("generic Vite builds and copies", () => {
         configFile: false,
         plugins: [
           githubActions({
-            projectRoot: root,
-            copies: [{ from: "definitions/**/*", to: "generated/" }],
+            root: root,
+            copy: [{ from: "definitions/**/*", to: "generated/" }],
           }),
         ],
       });
@@ -82,8 +82,8 @@ describe("generic Vite builds and copies", () => {
       writeFileSync(join(root, "one/input.json"), "{}");
       writeFileSync(join(root, "two/input.json"), "{}");
       const plugin = githubActions({
-        projectRoot: root,
-        copies: [
+        root: root,
+        copy: [
           { from: "one/*.json", to: "out/input.json" },
           { from: "two/*.json", to: "out/input.json" },
         ],
