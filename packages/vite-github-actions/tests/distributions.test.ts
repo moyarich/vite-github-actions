@@ -110,6 +110,28 @@ describe("generated action distributions", () => {
       rmSync(root, { recursive: true, force: true });
     }
   });
+  it("discovers colocated composite scripts and JSON schemas", () => {
+    const root = mkdtempSync(join(tmpdir(), "github-actions-auto-"));
+    try {
+      const write = (name: string, data: string) => {
+        const file = join(root, name);
+        mkdirSync(join(file, ".."), { recursive: true });
+        writeFileSync(file, data);
+      };
+      write("metadata/composite/action.yml",
+        'name: Composite\nruns:\n  using: composite\n  steps:\n    - shell: bash\n      run: node "$GITHUB_ACTION_PATH/index.mjs"\n');
+      write("src/composite/index.ts", "const answer: number = 42; console.log(answer);");
+      write("src/composite/schemas/config.json", '{"type":"object"}');
+      generateActionDistributions({
+        metadataDir: "metadata", sourcesDir: "src", outputDir: "bundles",
+        distributionDir: "actions", discoverFromMetadata: true, assets: ["**/*.json"],
+      }, [], root);
+      expect(readFileSync(join(root, "actions/composite/index.mjs"), "utf8")).toContain("42");
+      expect(readFileSync(join(root, "actions/composite/schemas/config.json"), "utf8")).toBe('{"type":"object"}');
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
   it("prevents replacing the metadata source", () => {
     const root = mkdtempSync(join(tmpdir(), "github-actions-"));
     try {
