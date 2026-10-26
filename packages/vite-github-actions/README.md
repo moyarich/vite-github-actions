@@ -86,7 +86,6 @@ Each directory under `metadataDir` contains an authored `action.yml`. The Vite b
 
 This is a breaking change in v0.2.0. Metadata-driven discovery is required; legacy explicit entry/runtime mappings are removed.
 
-
 ## Breaking change: v0.2.0
 
 `action.yml` files are the source of truth for action discovery. The former `entries`, `runtimeFiles`, `actionsDir`, `generateDistributions`, `includeDiscovered`, and `discoverFromMetadata` options are removed. Use colocated source files and `assets` patterns instead. Generated distributions are always assembled for multi-action projects.
