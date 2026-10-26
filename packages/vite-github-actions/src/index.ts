@@ -72,6 +72,7 @@ function mappingFiles(root: string, mappings: FileMapping[]): ResolvedFile[] {
     if (!names.length) throw new Error("No files match: " + mapping.from);
     for (const file of names) {
       const source = safe(root, file);
+      if (lstatSync(source).isSymbolicLink()) throw new Error("Symlink source not supported: " + source);
       if (!statSync(source).isFile()) continue;
       const name = basename(source, extname(source));
       const parent = basename(dirname(source));
@@ -117,6 +118,14 @@ export function githubActions(options: GithubActionsOptions = {}): Plugin {
   return {
     name: "vite-github-actions",
     apply: "build",
+    resolveId(id) {
+      if (id === "\\0vite-github-actions:copy-only") return id;
+      return null;
+    },
+    load(id) {
+      if (id === "\\0vite-github-actions:copy-only") return "export {};";
+      return null;
+    },
     config() {
       built = mappingFiles(root, options.builds ?? []);
       copied = mappingFiles(root, options.copies ?? []);
@@ -179,6 +188,8 @@ export function githubActions(options: GithubActionsOptions = {}): Plugin {
         } finally {
           rmSync(staging, { recursive: true, force: true });
         }
+      } else if (existsSync(staging)) {
+        rmSync(staging, { recursive: true, force: true });
       }
     },
   };
