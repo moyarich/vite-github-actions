@@ -67,14 +67,15 @@ When an application uses an alternate metadata filename or a source layout that 
 githubActions({
   projectRoot: "../..",
   metadataDir: "packages/action-definitions",
-  metadataFile: "metadata.yaml",
+  metadataPatterns: ["**/metadata.yaml"],
   sourcesDir: "packages/implementation",
-  entryNames: ["unrelated/start.ts"],
+  sourceDirs: { custom: "packages/implementation/unrelated" },
+  entryNames: ["start.ts"],
   outputDir: "packages/action-definitions/.bundles",
   distributionDir: "generated-actions",
 });
 ```
 
-The `metadataFile` option changes the filename searched inside each action directory; `entryNames` values resolve relative to `sourcesDir`. A generalized metadata-pattern scanner is a separate enhancement, not implied by this example. Do not place authored metadata or intermediate bundles inside `distributionDir`, because that directory is replaced on build.
+`metadataPatterns` selects metadata regardless of its filename; `sourceDirs` maps individual actions to unrelated source directories. `entryNames` paths are resolved relative to those roots. Do not place authored metadata or intermediate bundles inside `distributionDir`, because that directory is replaced on build.
 
 **Important:** `action.yml` above is a consumer's filename, not a naming requirement for every repository. The plugin must not embed these paths as fixed conventions.
