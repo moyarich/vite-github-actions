@@ -27,8 +27,6 @@ import {
   flattenDiagnosticMessageText,
 } from "typescript";
 
-/** Additional runtime files copied next to a generated action's metadata. */
-export type ActionFiles = Record<string, Record<string, string>>;
 /** A standalone action exposed as owner/repository@ref in GitHub Marketplace. */
 export interface RepositoryActionOptions {
   /** JavaScript or TypeScript entrypoint, relative to repository root. */
@@ -43,8 +41,6 @@ export interface GithubActionsOptions {
   projectRoot?: string;
   /** Build a single action with metadata at repository root. */
   repositoryAction?: RepositoryActionOptions;
-  /** Legacy action metadata location (default: actions). */
-  actionsDir?: string;
   /** Legacy directory scanned for source action entrypoints. */
   sourcesDir?: string;
   /** Vite intermediate bundle output (default: actions/dist). */
@@ -52,26 +48,16 @@ export interface GithubActionsOptions {
   target?: string;
   bundleDependencies?: boolean;
   validateMetadata?: boolean;
-  /** Explicit action name -> JS/TS entrypoint, overriding discovery. */
-  entries?: Record<string, string>;
   /** Source metadata directories; defaults to actionsDir. */
   metadataDir?: string;
-  /** Generate action.yml and runtime files into distributionDir. Opt-in for compatibility. */
-  generateDistributions?: boolean;
   /** Public action directory. When generation is enabled defaults to actionsDir. */
   distributionDir?: string;
-  /** Runtime source file paths mapped to distribution-relative filenames by action. */
-  runtimeFiles?: ActionFiles;
   /** Copy additional metadata files (e.g. README) from each source action directory. */
   copyMetadata?: boolean;
   /** Place JS bundles at <name>/index.mjs with shared chunks in _assets. */
   sharedChunks?: boolean;
   /** Per-action source filename discovery candidates (default index.ts, <name>-cli.ts). */
   entryNames?: string[];
-  /** Skip discovery when explicit entries are supplied. */
-  includeDiscovered?: boolean;
-  /** Discover Node action entries from authored action.yml directories. */
-  discoverFromMetadata?: boolean;
   /** Additional colocated asset patterns, e.g. **/*.json. */
   assets?: string[];
 }
@@ -118,7 +104,7 @@ function copySafe(
   });
 }
 function discoverMetadataEntries(root: string, options: GithubActionsOptions): Record<string, string> {
-  const metadataDir = resolve(root, options.metadataDir ?? options.actionsDir ?? 'actions');
+  const metadataDir = resolve(root, options.metadataDir ?? 'actions');
   const sourceDir = resolve(root, options.sourcesDir ?? 'src/actions');
   const result: Record<string, string> = {};
   for (const item of readdirSync(metadataDir, { withFileTypes: true })) {
@@ -164,27 +150,6 @@ function autoFiles(root: string, options: GithubActionsOptions, name: string, ya
   }
   return result;
 }
-export function discoverActionEntries(
-  sourcesDir: string,
-  entryNames?: string[],
-): Record<string, string> {
-  const entries: Record<string, string> = {};
-  if (!existsSync(sourcesDir))
-    throw new Error("Actions source directory not found: " + sourcesDir);
-  for (const entry of readdirSync(sourcesDir, { withFileTypes: true })) {
-    if (!entry.isDirectory()) continue;
-    const base = join(sourcesDir, entry.name);
-    const file = (entryNames ?? ["index.ts", "{name}-cli.ts"])
-      .map((name) => name.replaceAll("{name}", entry.name))
-      .find((name) => existsSync(join(base, name)));
-    if (!file) throw new Error("Missing action entry: " + base);
-    entries[entry.name] = join(base, file);
-  }
-  if (!Object.keys(entries).length)
-    throw new Error("No action entries discovered");
-  return entries;
-}
-
 /**
  * Assemble a complete, replaceable distribution from metadata, Vite output,
  * and declared runtime files. Sources must be outside the generated tree.
@@ -196,11 +161,11 @@ export function generateActionDistributions(
 ): void {
   const metadata = resolve(
     root,
-    options.metadataDir ?? options.actionsDir ?? "actions",
+    options.metadataDir ?? "actions",
   );
   const destination = resolve(
     root,
-    options.distributionDir ?? options.actionsDir ?? "actions",
+    options.distributionDir ?? "actions",
   );
   const bundles = resolve(root, options.outputDir ?? "actions/dist");
   if (
@@ -272,13 +237,12 @@ export function generateActionDistributions(
         );
       } else if (isNode) {
         const main = yaml.match(/^\s*main:\s*["']?([^\s"'#]+)["']?\s*$/m)?.[1];
-        if (!main || !(options.runtimeFiles?.[name]?.[main] ?? (options.discoverFromMetadata ? autoFiles(root, options, name, yaml)[main] : undefined)))
+        if (!main || !(autoFiles(root, options, name, yaml)[main]))
           throw new Error("Missing Node runtime mapping: " + name);
       }
       for (const [target, source] of Object.entries(
         {
-          ...(options.discoverFromMetadata ? autoFiles(root, options, name, yaml) : {}),
-          ...(options.runtimeFiles?.[name] ?? {}),
+          ...autoFiles(root, options, name, yaml),
         },
       )) {
         const from = safePath(root, source, "Runtime file");
@@ -357,14 +321,9 @@ export function generateActionDistributions(
 }
 export function githubActions(options: GithubActionsOptions = {}): Plugin {
   const root = resolve(process.cwd(), options.projectRoot ?? ".");
-  const sources = resolve(root, options.sourcesDir ?? "src/actions");
   const output = resolve(
     root,
     options.outputDir ?? (options.repositoryAction ? "dist" : "actions/dist"),
-  );
-  const actions = resolve(
-    root,
-    options.metadataDir ?? options.actionsDir ?? "actions",
   );
   let names: string[] = [];
   return {
@@ -372,15 +331,6 @@ export function githubActions(options: GithubActionsOptions = {}): Plugin {
     apply: "build",
     config() {
       if (options.repositoryAction) {
-        if (
-          options.generateDistributions ||
-          options.entries ||
-          options.includeDiscovered ||
-          options.sharedChunks
-        )
-          throw new Error(
-            "repositoryAction cannot be combined with monorepo distribution options",
-          );
         const {
           entry,
           metadataFile = "action.yml",
@@ -431,46 +381,17 @@ export function githubActions(options: GithubActionsOptions = {}): Plugin {
           },
         };
       }
-      const explicit = Object.fromEntries(
-        Object.entries(options.entries ?? {}).map(([name, file]) => {
-          const path = safePath(root, file, "Action entry");
-          if (!existsSync(path))
-            throw new Error("Action entry not found: " + path);
-          return [name, path];
-        }),
-      );
-      const discovered =
-        options.entries && options.includeDiscovered !== true
-          ? {}
-          : options.discoverFromMetadata
-            ? discoverMetadataEntries(root, options)
-            : discoverActionEntries(sources, options.entryNames);
-      const entries = { ...discovered, ...explicit };
+      const entries = discoverMetadataEntries(root, options);
       names = Object.keys(entries);
       if (!names.length) throw new Error("No action entries configured");
       if (
-        options.generateDistributions &&
+        true &&
         (options.outputDir ?? "actions/dist") ===
-          (options.distributionDir ?? options.actionsDir ?? "actions")
+          (options.distributionDir ?? "actions")
       )
         throw new Error(
           "Bundle output and distribution cannot be the same directory",
         );
-      if (
-        !options.generateDistributions &&
-        options.validateMetadata !== false
-      ) {
-        for (const name of names) {
-          const metadata = join(actions, name, "action.yml");
-          if (!existsSync(metadata)) continue;
-          const yaml = readFileSync(metadata, "utf8");
-          const expected = "../dist/" + name + ".mjs";
-          if (!yaml.includes(expected))
-            throw new Error(
-              "Action metadata " + metadata + " must reference " + expected,
-            );
-        }
-      }
       return {
         ssr: {
           noExternal: options.bundleDependencies === false ? undefined : true,
@@ -495,7 +416,7 @@ export function githubActions(options: GithubActionsOptions = {}): Plugin {
       };
     },
     closeBundle() {
-      if (options.generateDistributions && !options.repositoryAction)
+      if (!options.repositoryAction)
         generateActionDistributions(options, names, root);
     },
   };
