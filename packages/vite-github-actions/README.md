@@ -85,3 +85,26 @@ Each directory under `metadataDir` contains an authored `action.yml`. The Vite b
 - `target`, `bundleDependencies`, `validateMetadata`: build controls
 
 The default behavior remains unchanged. Use the existing repository's `check-dist` workflow to verify generated/checked-in distributions.
+
+## Metadata-driven discovery (opt-in)
+
+Use authored `action.yml` directories as the action list. Node actions are resolved from `sourcesDir/<action-name>/` using `entryNames` (default candidates: `action-entry.ts`, `entry.ts`, `index.ts`, `{name}.ts`, `{name}-cli.ts`). Composite actions automatically collect scripts referenced by `$GITHUB_ACTION_PATH` when their sources are colocated; colocated JSON assets may be copied with `assets: ["**/*.json"]`, retaining their subdirectory paths.
+
+```ts
+// vite.config.ts
+export default defineConfig({
+  plugins: [githubActions({
+    projectRoot: '../..',
+    sourcesDir: 'packages/cli/src',
+    metadataDir: 'packages/actions/actions',
+    outputDir: 'packages/actions/dist/.bundles',
+    distributionDir: 'actions',
+    generateDistributions: true,
+    sharedChunks: true,
+    discoverFromMetadata: true,
+    assets: ['**/*.json'],
+  })],
+});
+```
+
+Explicit `entries` and `runtimeFiles` remain available for exceptions and override inferred paths. Automatic composite TypeScript handling uses standalone transpilation, not dependency bundling; scripts with imports should be authored as Vite entrypoints or bundled separately.
