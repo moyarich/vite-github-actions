@@ -72,7 +72,7 @@ githubActions({
   entryNames: ["unrelated/start.ts"],
   outputDir: "packages/action-definitions/.bundles",
   distributionDir: "generated-actions",
-})
+});
 ```
 
 The `metadataFile` option changes the filename searched inside each action directory; `entryNames` values resolve relative to `sourcesDir`. A generalized metadata-pattern scanner is a separate enhancement, not implied by this example. Do not place authored metadata or intermediate bundles inside `distributionDir`, because that directory is replaced on build.
