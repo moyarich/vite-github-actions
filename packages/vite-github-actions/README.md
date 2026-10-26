@@ -2,7 +2,7 @@
 
 Vite plugin to bundle Node.js GitHub Actions. Supports three layouts: existing action directories, configurable multi-action distributions, and standalone GitHub Marketplace repositories.
 
-## Existing action directories (compatible defaults)
+## Metadata-driven action discovery
 
 ```ts
 import { defineConfig } from "vite";
@@ -84,29 +84,9 @@ Each directory under `metadataDir` contains an authored `action.yml`. The Vite b
 - `generateDistributions`: opt in to a full generated distribution
 - `target`, `bundleDependencies`, `validateMetadata`: build controls
 
-The default behavior remains unchanged. Use the existing repository's `check-dist` workflow to verify generated/checked-in distributions.
+This is a breaking change in v0.2.0. Metadata-driven discovery is required; legacy explicit entry/runtime mappings are removed.
 
-## Metadata-driven discovery (opt-in)
 
-Use authored `action.yml` directories as the action list. Node actions are resolved from `sourcesDir/<action-name>/` using `entryNames` (default candidates: `action-entry.ts`, `entry.ts`, `index.ts`, `{name}.ts`, `{name}-cli.ts`). Composite actions automatically collect scripts referenced by `$GITHUB_ACTION_PATH` when their sources are colocated; colocated JSON assets may be copied with `assets: ["**/*.json"]`, retaining their subdirectory paths.
+## Breaking change: v0.2.0
 
-```ts
-// vite.config.ts
-export default defineConfig({
-  plugins: [
-    githubActions({
-      projectRoot: "../..",
-      sourcesDir: "packages/cli/src",
-      metadataDir: "packages/actions/actions",
-      outputDir: "packages/actions/dist/.bundles",
-      distributionDir: "actions",
-      generateDistributions: true,
-      sharedChunks: true,
-      discoverFromMetadata: true,
-      assets: ["**/*.json"],
-    }),
-  ],
-});
-```
-
-Explicit `entries` and `runtimeFiles` remain available for exceptions and override inferred paths. Automatic composite TypeScript handling uses standalone transpilation, not dependency bundling; scripts with imports should be authored as Vite entrypoints or bundled separately.
+`action.yml` files are the source of truth for action discovery. The former `entries`, `runtimeFiles`, `actionsDir`, `generateDistributions`, `includeDiscovered`, and `discoverFromMetadata` options are removed. Use colocated source files and `assets` patterns instead. Generated distributions are always assembled for multi-action projects.
