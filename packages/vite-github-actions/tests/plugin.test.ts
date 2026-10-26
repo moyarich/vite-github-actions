@@ -10,14 +10,27 @@ describe("vite-github-actions", () => {
     try {
       mkdirSync(join(root, "metadata/example"), { recursive: true });
       mkdirSync(join(root, "src/example"), { recursive: true });
-      writeFileSync(join(root, "metadata/example/action.yml"), "name: Example\nruns:\n  using: node24\n  main: index.mjs\n");
+      writeFileSync(
+        join(root, "metadata/example/action.yml"),
+        "name: Example\nruns:\n  using: node24\n  main: index.mjs\n",
+      );
       writeFileSync(join(root, "src/example/index.ts"), "export {};");
-      const plugin = githubActions({ projectRoot: root, metadataDir: "metadata", sourcesDir: "src", distributionDir: "actions" });
+      const plugin = githubActions({
+        projectRoot: root,
+        metadataDir: "metadata",
+        sourcesDir: "src",
+        distributionDir: "actions",
+      });
       expect(plugin.name).toBe("vite-github-actions");
       const config = plugin.config;
-      if (typeof config !== "function") throw new Error("Expected Vite config function");
-      const result = config.call({} as never, {} as never) as { build: { rollupOptions: { input: Record<string, string> } } };
-      expect(result.build.rollupOptions.input.example).toBe(join(root, "src/example/index.ts"));
+      if (typeof config !== "function")
+        throw new Error("Expected Vite config function");
+      const result = config.call({} as never, {} as never) as {
+        build: { rollupOptions: { input: Record<string, string> } };
+      };
+      expect(result.build.rollupOptions.input.example).toBe(
+        join(root, "src/example/index.ts"),
+      );
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
