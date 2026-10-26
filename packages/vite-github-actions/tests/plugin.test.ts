@@ -40,14 +40,33 @@ describe("vite-github-actions", () => {
     try {
       mkdirSync(join(root, "definitions/custom"), { recursive: true });
       mkdirSync(join(root, "implementations/unrelated"), { recursive: true });
-      writeFileSync(join(root, "definitions/custom/metadata.yaml"), "runs:\n  using: node24\n  main: index.mjs\n");
-      writeFileSync(join(root, "implementations/unrelated/start.ts"), "export {};");
-      const plugin = githubActions({ projectRoot: root, metadataDir: "definitions", metadataFile: "metadata.yaml", sourcesDir: "implementations", entryNames: ["unrelated/start.ts"], distributionDir: "dist-actions" });
+      writeFileSync(
+        join(root, "definitions/custom/metadata.yaml"),
+        "runs:\n  using: node24\n  main: index.mjs\n",
+      );
+      writeFileSync(
+        join(root, "implementations/unrelated/start.ts"),
+        "export {};",
+      );
+      const plugin = githubActions({
+        projectRoot: root,
+        metadataDir: "definitions",
+        metadataFile: "metadata.yaml",
+        sourcesDir: "implementations",
+        entryNames: ["unrelated/start.ts"],
+        distributionDir: "dist-actions",
+      });
       const config = plugin.config;
       if (typeof config !== "function") throw new Error("Expected config");
-      const result = config.call({} as never, {} as never) as { build: { rollupOptions: { input: Record<string, string> } } };
-      expect(result.build.rollupOptions.input.custom).toBe(join(root, "implementations/unrelated/start.ts"));
-    } finally { rmSync(root, { recursive: true, force: true }); }
+      const result = config.call({} as never, {} as never) as {
+        build: { rollupOptions: { input: Record<string, string> } };
+      };
+      expect(result.build.rollupOptions.input.custom).toBe(
+        join(root, "implementations/unrelated/start.ts"),
+      );
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
   it("provides a Vite plugin", () => {
     expect(githubActions().name).toBe("vite-github-actions");
