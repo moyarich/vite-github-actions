@@ -13,7 +13,10 @@ export default defineConfig({
     githubActions({
       projectRoot: "../..",
       builds: [
-        { from: "packages/cli/src/*/action-entry.ts", to: "actions/{parent}/index.mjs" },
+        {
+          from: "packages/cli/src/*/action-entry.ts",
+          to: "actions/{parent}/index.mjs",
+        },
       ],
       copies: [
         { from: "packages/actions/actions/**/*", to: "actions/" },
@@ -43,7 +46,7 @@ Directories in `to` are indicated by a trailing slash or by omitting the destina
 ```ts
 githubActions({
   copies: [{ from: "metadata/**/*", to: "dist/" }],
-})
+});
 ```
 
 ## Standalone Node action
@@ -52,7 +55,7 @@ githubActions({
 githubActions({
   builds: [{ from: "src/runner.ts", to: "dist/runner.mjs" }],
   copies: [{ from: "manifest/action.yaml", to: "action.yaml" }],
-})
+});
 ```
 
 The consumer is responsible for making its action metadata refer to `dist/runner.mjs`. The plugin does not parse or rewrite metadata.
