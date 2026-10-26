@@ -28,16 +28,19 @@ export interface FileMapping {
 }
 
 export interface GithubActionsOptions {
-  /** Base directory for source and destination paths. Defaults to the Vite invocation directory. */
-  projectRoot?: string;
-  /** Source files to bundle using Vite. */
-  builds?: FileMapping[];
-  /** Files to copy without changing their contents. */
-  copies?: FileMapping[];
-  /** Node build target. */
-  target?: string;
-  /** Bundle imported packages, rather than leaving them external. */
-  bundleDependencies?: boolean;
+  /** Base directory for input and output, like Vite's root. */
+  root?: string;
+  /** Build configuration, following Vite's build/input conventions. */
+  build?: {
+    /** Source glob to destination mappings. */
+    input?: FileMapping[];
+    /** Node.js target. */
+    target?: string;
+    /** Bundle imported packages rather than externalizing them. */
+    bundleDependencies?: boolean;
+  };
+  /** Static files to copy unchanged, like publicDir assets. */
+  copy?: FileMapping[];
 }
 
 interface ResolvedFile {
@@ -56,7 +59,7 @@ function within(root: string, value: string): boolean {
 function safe(root: string, value: string): string {
   const full = resolve(root, value);
   if (!within(root, full))
-    throw new Error("Path escapes projectRoot: " + value);
+    throw new Error("Path escapes root: " + value);
   return full;
 }
 
@@ -112,7 +115,7 @@ function assertDistinct(files: ResolvedFile[]): void {
 }
 
 export function githubActions(options: GithubActionsOptions = {}): Plugin {
-  const root = resolve(process.cwd(), options.projectRoot ?? ".");
+  const root = resolve(process.cwd(), options.root ?? ".");
   const staging = safe(root, ".vite-github-actions-build");
   let built: ResolvedFile[] = [];
   let copied: ResolvedFile[] = [];
@@ -130,11 +133,11 @@ export function githubActions(options: GithubActionsOptions = {}): Plugin {
       return null;
     },
     config() {
-      built = mappingFiles(root, options.builds ?? []);
-      copied = mappingFiles(root, options.copies ?? []);
+      built = mappingFiles(root, options.build?.input ?? []);
+      copied = mappingFiles(root, options.copy ?? []);
       assertDistinct([...built, ...copied]);
       if (!built.length && !copied.length)
-        throw new Error("Provide builds or copies");
+        throw new Error("Provide build.input or copy");
       outputNames = Object.fromEntries(
         built.map((entry, index) => [String(index), entry.source]),
       );
@@ -150,11 +153,11 @@ export function githubActions(options: GithubActionsOptions = {}): Plugin {
         };
       return {
         ssr: {
-          noExternal: options.bundleDependencies === false ? undefined : true,
+          noExternal: options.build?.bundleDependencies === false ? undefined : true,
         },
         build: {
           ssr: true,
-          target: options.target ?? "node24",
+          target: options.build?.target ?? "node24",
           outDir: staging,
           emptyOutDir: true,
           minify: false,
