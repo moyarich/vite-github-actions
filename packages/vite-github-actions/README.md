@@ -1,5 +1,7 @@
 # @moyarich/vite-github-actions
 
+See [multi-action monorepo Vite examples](examples/monorepo-actions.md) for the `packages/actions` layout, alternate metadata filenames, and source-directory configuration.
+
 Vite plugin to bundle Node.js GitHub Actions. Supports three layouts: existing action directories, configurable multi-action distributions, and standalone GitHub Marketplace repositories.
 
 ## Metadata-driven action discovery
