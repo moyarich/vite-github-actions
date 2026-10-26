@@ -28,14 +28,14 @@ import { githubActions } from "@moyarich/vite-github-actions";
 export default defineConfig({
   plugins: [
     githubActions({
-      projectRoot: "../..",
-      builds: [
+      root: "../..",
+      build: { input: [
         {
           from: "packages/cli/src/*/action-entry.ts",
           to: "actions/{parent}/index.mjs",
         },
-      ],
-      copies: [
+      ] },
+      copy: [
         { from: "packages/actions/actions/**/*", to: "actions/" },
         { from: "packages/cli/src/schemas/**/*.json", to: "actions/schemas/" },
       ],
@@ -44,20 +44,20 @@ export default defineConfig({
 });
 ```
 
-This illustrates one consumer's layout, **not required naming conventions**. Add additional `builds` entries for other source filenames, or use a wider matching pattern when appropriate. The plugin does not guess which scripts a composite action will execute; provide those in `builds` or `copies` as needed.
+This illustrates one consumer's layout, **not required naming conventions**. Add additional `build.input` entries for other source filenames, or use a wider matching pattern when appropriate. The plugin does not guess which scripts a composite action will execute; provide those in `build.input` or `copy` as needed.
 
 ## Completely different layout
 
 ```ts
 githubActions({
-  projectRoot: ".",
-  builds: [
+  root: ".",
+  build: { input: [
     {
       from: "implementation/**/runner.ts",
       to: "artifacts/{parent}/runner.mjs",
     },
-  ],
-  copies: [{ from: "definitions/**/*", to: "artifacts/definitions/" }],
+  ] },
+  copy: [{ from: "definitions/**/*", to: "artifacts/definitions/" }],
 });
 ```
 
