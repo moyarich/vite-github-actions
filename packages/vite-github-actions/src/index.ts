@@ -70,6 +70,8 @@ export interface GithubActionsOptions {
   entryNames?: string[];
   /** Skip discovery when explicit entries are supplied. */
   includeDiscovered?: boolean;
+  /** Discover Node action entries from authored action.yml directories. */
+  discoverFromMetadata?: boolean;
 }
 function inside(base: string, target: string): boolean {
   const rel = relative(base, target);
@@ -112,6 +114,24 @@ function copySafe(
       return true;
     },
   });
+}
+function discoverMetadataEntries(root: string, options: GithubActionsOptions): Record<string, string> {
+  const metadataDir = resolve(root, options.metadataDir ?? options.actionsDir ?? 'actions');
+  const sourceDir = resolve(root, options.sourcesDir ?? 'src/actions');
+  const result: Record<string, string> = {};
+  for (const item of readdirSync(metadataDir, { withFileTypes: true })) {
+    if (!item.isDirectory()) continue;
+    const yamlPath = join(metadataDir, item.name, 'action.yml');
+    if (!existsSync(yamlPath)) continue;
+    const yaml = readFileSync(yamlPath, 'utf8');
+    if (!yaml.includes('using: node24') && !yaml.includes('using: node20')) continue;
+    const candidates = (options.entryNames ?? ['action-entry.ts', 'entry.ts', 'index.ts', '{name}.ts', '{name}-cli.ts'])
+      .map(name => name.replaceAll('{name}', item.name));
+    const entry = candidates.find(file => existsSync(join(sourceDir, item.name, file)));
+    if (!entry) throw new Error('Missing Node action entry: ' + item.name);
+    result[item.name] = join(sourceDir, item.name, entry);
+  }
+  return result;
 }
 export function discoverActionEntries(
   sourcesDir: string,
@@ -388,7 +408,9 @@ export function githubActions(options: GithubActionsOptions = {}): Plugin {
       const discovered =
         options.entries && options.includeDiscovered !== true
           ? {}
-          : discoverActionEntries(sources, options.entryNames);
+          : options.discoverFromMetadata
+            ? discoverMetadataEntries(root, options)
+            : discoverActionEntries(sources, options.entryNames);
       const entries = { ...discovered, ...explicit };
       names = Object.keys(entries);
       if (!names.length) throw new Error("No action entries configured");
