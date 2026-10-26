@@ -1,87 +1,69 @@
 # @moyarich/vite-github-actions
 
-Vite plugin to bundle Node.js GitHub Actions. Supports three layouts: existing action directories, configurable multi-action distributions, and standalone GitHub Marketplace repositories.
+A generic Vite plugin to build JavaScript/TypeScript files and copy other files into destinations you specify. **It does not inspect GitHub Actions metadata or assume particular filenames or repository layouts.**
 
-## Existing action directories (compatible defaults)
+## Usage
 
 ```ts
 import { defineConfig } from "vite";
 import { githubActions } from "@moyarich/vite-github-actions";
-export default defineConfig({ plugins: [githubActions()] });
-```
 
-Discover `src/actions/<name>/index.ts` or `<name>-cli.ts` and output `actions/dist/<name>.mjs`. No distribution directory is replaced in this mode.
-
-## Standalone Marketplace action repository
-
-The **repository root** contains `action.yml` (or `action.yaml`). Its `runs.main` points to the generated file. Consumers can then use `owner/repository@v1`.
-
-```yaml
-# action.yml at repository root
-name: Example Action
-description: Example Node-based GitHub Action
-branding:
-  icon: package
-  color: blue
-runs:
-  using: node24
-  main: dist/index.mjs
-```
-
-```ts
-// vite.config.ts
-import { defineConfig } from "vite";
-import { githubActions } from "@moyarich/vite-github-actions";
 export default defineConfig({
   plugins: [
     githubActions({
-      repositoryAction: { entry: "src/index.ts" },
-    }),
-  ],
-});
-```
-
-The plugin bundles to `dist/index.mjs`, checks that the root action metadata points there, and **does not delete the repository root**. Set `repositoryAction.metadataFile` to `action.yaml` or `repositoryAction.main` to a custom distribution filename. The optional `outputDir` must match its parent directory. This mode intentionally doesn't copy metadata or manage releases.
-
-GitHub Marketplace listing is a **separate GitHub release action**: the repository must be public and have a single root action metadata file, with a unique Marketplace name. Publish a release using GitHub's _Publish this Action to the GitHub Marketplace_ option. The plugin prepares build files but cannot register or publish the listing.
-
-## Multi-action distribution
-
-```ts
-import { defineConfig } from "vite";
-import { githubActions } from "@moyarich/vite-github-actions";
-export default defineConfig({
-  plugins: [
-    githubActions({
-      entries: { publish: "src/commands/publish.ts" },
-      metadataDir: "packages/actions/actions",
-      outputDir: "packages/actions/dist/bundles",
-      distributionDir: "actions",
-      generateDistributions: true,
-      sharedChunks: true,
-      runtimeFiles: {
-        "check-dist": {
-          "select.mjs": "packages/cli/src/check-dist/select.ts",
-          "config.schema.json":
-            "reusable-configurations/check-dist-config.schema.json",
-        },
+      root: "../..",
+      build: {
+        input: [
+          {
+            from: "packages/cli/src/*/action-entry.ts",
+            to: "actions/{parent}/index.mjs",
+          },
+        ],
       },
+      copy: [
+        { from: "packages/actions/actions/**/*", to: "actions/" },
+        { from: "packages/cli/src/**/*.json", to: "actions/" },
+      ],
     }),
   ],
 });
 ```
 
-Each directory under `metadataDir` contains an authored `action.yml`. The Vite bundles, metadata, composite scripts, and declared runtime files assemble into disposable `distributionDir`. Put metadata and intermediate bundles **outside** that directory. The generated distribution is replaced after successfully staging its contents; never place authored files there.
+The directory names above belong to the example consumer, not the plugin. Neither `action.yml` nor any other metadata filename has special meaning.
 
-### Options
+### File mappings
 
-- `entries`: explicit action name to source entrypoint mapping; `includeDiscovered` adds automatic discovery
-- `entryNames`: source filenames used during discovery, including `{name}` replacement
-- `metadataDir`, `distributionDir`, `outputDir`: independent source, generated, and staging directories
-- `runtimeFiles`: per-action target path → tracked source file mapping. JavaScript targets (`.js`, `.mjs`, `.cjs`) mapped from `.ts`, `.tsx`, `.mts`, or `.cts` sources are transpiled with TypeScript; other assets are copied unchanged. This strips types but does not bundle dependencies or resolve imports.
-- `copyMetadata`: copy other authored files alongside `action.yml` (default true)
-- `sharedChunks`: put entries under each action directory and chunks under `_assets`
-- `generateDistributions`: opt in to a full generated distribution
-- `target`, `bundleDependencies`, `validateMetadata`: build controls
+- `from`: file path or Node-compatible glob relative to `root`.
+- `to`: destination file or directory, also relative to `root`.
+- `{name}`: source basename without extension.
+- `{parent}`: immediate source directory.
+- `{relative}`: relative path from the non-glob prefix of `from`.
+- `build.input`: use Vite to bundle the specified entry files. Shared chunks and assets preserve their relative generated paths.
+- `copy`: copy the matched files without interpreting or changing their contents.
 
-The default behavior remains unchanged. Use the existing repository's `check-dist` workflow to verify generated/checked-in distributions.
+Directories in `to` are indicated by a trailing slash or by omitting the destination extension. Destination collisions are rejected; unmatched globs fail rather than silently omitting expected files.
+
+## Copy-only project
+
+```ts
+githubActions({
+  copy: [{ from: "metadata/**/*", to: "dist/" }],
+});
+```
+
+## Standalone Node action
+
+```ts
+githubActions({
+  build: { input: [{ from: "src/runner.ts", to: "dist/runner.mjs" }] },
+  copy: [{ from: "manifest/action.yaml", to: "action.yaml" }],
+});
+```
+
+The consumer is responsible for making its action metadata refer to `dist/runner.mjs`. The plugin does not parse or rewrite metadata.
+
+## Breaking change in 0.2.0
+
+The old `entries`, `runtimeFiles`, `repositoryAction`, metadata discovery and distribution generation options are removed. Replace them with `build.input` and `copy`. This intentionally does not preserve compatibility with 0.1.0.
+
+See [monorepo examples](examples/monorepo-actions.md).
