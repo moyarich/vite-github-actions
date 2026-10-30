@@ -21,11 +21,10 @@ on:
         description: Select a publishable workspace package
         required: true
         type: choice
-        default: "all"
+        default: all
         options:
-          - "all"
-          - "packages/example"
-          - "packages/vite-github-actions"
+          - all
+          - packages/example
       version-mode:
         description: Version mode
         required: true
@@ -66,11 +65,9 @@ jobs:
     name: "job: Workflow parameters"
     permissions:
       contents: read
-    uses: 
-      moyarich/reusable-workflows/.github/workflows/reusable_dispatch-input-summary.yml@main
+    uses: moyarich/reusable-workflows/.github/workflows/reusable_dispatch-input-summary.yml@main
     with:
-      parameters-json: ${{ github.event_name == 'workflow_dispatch' && 
-        toJSON(inputs) || '{}' }}
+      parameters-json: ${{ github.event_name == 'workflow_dispatch' && toJSON(inputs) || '{}' }}
       heading: "release-draft · Run parameters"
 
   discover-packages:
@@ -78,8 +75,8 @@ jobs:
     name: Discover publishable packages
     permissions:
       contents: read
-    uses: 
-      moyarich/reusable-workflows/.github/workflows/reusable_discover-packages.yml@main
+      packages: read
+    uses: moyarich/reusable-workflows/.github/workflows/reusable_discover-packages.yml@main
     with:
       packages-directory: packages
       use-workspaces: true
@@ -92,8 +89,7 @@ jobs:
     needs: discover-packages
     permissions:
       contents: read
-    uses: 
-      moyarich/reusable-workflows/.github/workflows/reusable_select-release-packages.yml@main
+    uses: moyarich/reusable-workflows/.github/workflows/reusable_select-release-packages.yml@main
     with:
       packages-json: ${{ needs.discover-packages.outputs.packages }}
       ignored-paths-json: '[".github/workflows/release-draft.yml"]'
@@ -103,12 +99,9 @@ jobs:
       before-sha: ${{ github.event.before || '' }}
       after-sha: ${{ github.sha }}
       target-branch: ${{ github.ref_name }}
-      version-mode: ${{ github.event_name == 'workflow_dispatch' && 
-        inputs.version-mode || '' }}
-      version-bump: ${{ github.event_name == 'workflow_dispatch' && 
-        inputs.version-bump || '' }}
-      exact-version: ${{ github.event_name == 'workflow_dispatch' && 
-        inputs.exact-version || '' }}
+      version-mode: ${{ github.event_name == 'workflow_dispatch' && inputs.version-mode || '' }}
+      version-bump: ${{ github.event_name == 'workflow_dispatch' && inputs.version-bump || '' }}
+      exact-version: ${{ github.event_name == 'workflow_dispatch' && inputs.exact-version || '' }}
 
   draft-package:
     name: "package: ${{ matrix.name }} | dir: ${{ matrix.directory }}"
@@ -122,7 +115,7 @@ jobs:
           needs.select-packages.outputs.has-packages == 'true' }}
     strategy:
       fail-fast: false
-      matrix: ${{ fromJSON(needs.select-packages.outputs.matrix || 
+      matrix: ${{ fromJSON(needs.select-packages.outputs.matrix ||
         '{"include":[]}') }}
     concurrency:
       group: draft-package-${{ github.repository }}-${{ matrix.directory }}
@@ -130,8 +123,7 @@ jobs:
     permissions:
       contents: write
       pull-requests: read
-    uses: 
-      moyarich/reusable-workflows/.github/workflows/reusable_release-drafter.yml@main
+    uses: moyarich/reusable-workflows/.github/workflows/reusable_release-drafter.yml@main
     with:
       target-branch: ${{ github.ref_name }}
       version: ""
@@ -145,5 +137,4 @@ jobs:
       changelog-path: ${{ format('{0}/CHANGELOG.md', matrix.directory) }}
       package-name: ${{ matrix.name }}
       package-directory: ${{ matrix.directory }}
-      dry-run: ${{ github.event_name == 'workflow_dispatch' && inputs.dry-run ||
-        false }}
+      dry-run: ${{ github.event_name == 'workflow_dispatch' && inputs.dry-run || false }}
