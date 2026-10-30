@@ -1,4 +1,4 @@
-name: Upgrade workspace dependencies
+name: Upgrade dependencies
 on:
   workflow_dispatch:
     inputs:
@@ -6,66 +6,11 @@ on:
         description: Comma-separated package names to exclude from upgrades (optional)
         type: string
         default: ""
-
 permissions:
   contents: write
   packages: read
-
 jobs:
   upgrade:
-    if: github.actor != 'github-actions[bot]'
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          ref: ${{ github.ref_name }}
-          persist-credentials: true
-      - uses: actions/setup-node@v7
-        with:
-          node-version: "24"
-          registry-url: https://npm.pkg.github.com
-          scope: "@moyarich"
-      - name: Upgrade registry dependencies in root and all workspaces
-        env:
-          NODE_AUTH_TOKEN: ${{ github.token }}
-          REJECT: ${{ inputs.reject }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          args=(--upgrade --workspaces --root --dep prod,dev,optional,peer)
-          if [[ -n "$REJECT" ]]; then
-            args+=(--reject "$REJECT")
-          fi
-          npm exec --yes --package npm-check-updates@latest -- npm-check-updates "${args[@]}"
-      - name: Update lockfile and verify clean installation
-        env:
-          NODE_AUTH_TOKEN: ${{ github.token }}
-        run: |
-          npm install --ignore-scripts --no-audit --no-fund
-          npm ci --ignore-scripts --no-audit --no-fund
-      - name: Commit upgraded manifests and lockfile
-        shell: bash
-        run: |
-          set -euo pipefail
-          git add package.json package-lock.json packages/*/package.json apps/*/package.json
-          if git diff --cached --quiet; then
-            echo "Dependencies are already up to date."
-            exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git commit -m "build: upgrade all workspace dependencies and peers"
-          for attempt in 1 2 3; do
-            git fetch --no-tags origin "refs/heads/${{ github.ref_name }}"
-            if ! git rebase FETCH_HEAD; then
-              git rebase --abort || true
-              echo "::error::Upgrades conflict with newer commits; rerun on the latest branch."
-              exit 1
-            fi
-            if git push origin "HEAD:refs/heads/${{ github.ref_name }}"; then
-              exit 0
-            fi
-          done
-          echo "::error::Could not push upgrade after three attempts."
-          exit 1
+    uses: moyarich/reusable-workflows/.github/workflows/reusable_upgrade-dependencies.yml@main
+    with:
+      reject: ${{ inputs.reject }}
